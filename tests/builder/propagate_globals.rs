@@ -1,13 +1,13 @@
-use clap::{App, Arg, ArgMatches};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 
-fn get_app() -> App<'static> {
-    App::new("myprog")
+fn get_app() -> Command {
+    Command::new("myprog")
         .arg(
             Arg::new("GLOBAL_ARG")
                 .long("global-arg")
                 .help("Specifies something needed by the subcommands")
                 .global(true)
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .default_value("default_value"),
         )
         .arg(
@@ -15,13 +15,13 @@ fn get_app() -> App<'static> {
                 .long("global-flag")
                 .help("Specifies something needed by the subcommands")
                 .global(true)
-                .multiple_occurrences(true),
+                .action(ArgAction::Count),
         )
-        .subcommand(App::new("outer").subcommand(App::new("inner")))
+        .subcommand(Command::new("outer").defer(|cmd| cmd.subcommand(Command::new("inner"))))
 }
 
-fn get_matches(app: App<'static>, argv: &'static str) -> ArgMatches {
-    app.try_get_matches_from(argv.split(' ').collect::<Vec<_>>())
+fn get_matches(cmd: Command, argv: &'static str) -> ArgMatches {
+    cmd.try_get_matches_from(argv.split(' ').collect::<Vec<_>>())
         .unwrap()
 }
 
@@ -37,29 +37,38 @@ fn get_inner_matches(m: &ArgMatches) -> &ArgMatches {
 }
 
 fn top_can_access_arg<T: Into<Option<&'static str>>>(m: &ArgMatches, val: T) -> bool {
-    m.value_of("GLOBAL_ARG") == val.into()
+    m.get_one::<String>("GLOBAL_ARG").map(|v| v.as_str()) == val.into()
 }
 
 fn inner_can_access_arg<T: Into<Option<&'static str>>>(m: &ArgMatches, val: T) -> bool {
-    get_inner_matches(m).value_of("GLOBAL_ARG") == val.into()
+    get_inner_matches(m)
+        .get_one::<String>("GLOBAL_ARG")
+        .map(|v| v.as_str())
+        == val.into()
 }
 
 fn outer_can_access_arg<T: Into<Option<&'static str>>>(m: &ArgMatches, val: T) -> bool {
-    get_outer_matches(m).value_of("GLOBAL_ARG") == val.into()
+    get_outer_matches(m)
+        .get_one::<String>("GLOBAL_ARG")
+        .map(|v| v.as_str())
+        == val.into()
 }
 
-fn top_can_access_flag(m: &ArgMatches, present: bool, occurrences: u64) -> bool {
-    (m.is_present("GLOBAL_FLAG") == present) && (m.occurrences_of("GLOBAL_FLAG") == occurrences)
+fn top_can_access_flag(m: &ArgMatches, present: bool, occurrences: u8) -> bool {
+    (m.contains_id("GLOBAL_FLAG") == present)
+        && (m.get_one::<u8>("GLOBAL_FLAG").copied() == Some(occurrences))
 }
 
-fn inner_can_access_flag(m: &ArgMatches, present: bool, occurrences: u64) -> bool {
+fn inner_can_access_flag(m: &ArgMatches, present: bool, occurrences: u8) -> bool {
     let m = get_inner_matches(m);
-    (m.is_present("GLOBAL_FLAG") == present) && (m.occurrences_of("GLOBAL_FLAG") == occurrences)
+    (m.contains_id("GLOBAL_FLAG") == present)
+        && (m.get_one::<u8>("GLOBAL_FLAG").copied() == Some(occurrences))
 }
 
-fn outer_can_access_flag(m: &ArgMatches, present: bool, occurrences: u64) -> bool {
+fn outer_can_access_flag(m: &ArgMatches, present: bool, occurrences: u8) -> bool {
     let m = get_outer_matches(m);
-    (m.is_present("GLOBAL_FLAG") == present) && (m.occurrences_of("GLOBAL_FLAG") == occurrences)
+    (m.contains_id("GLOBAL_FLAG") == present)
+        && (m.get_one::<u8>("GLOBAL_FLAG").copied() == Some(occurrences))
 }
 
 #[test]

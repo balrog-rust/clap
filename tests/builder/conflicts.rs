@@ -1,114 +1,175 @@
-use crate::utils;
+use clap::{arg, error::ErrorKind, Arg, ArgAction, ArgGroup, Command};
 
-use clap::{arg, App, Arg, ArgGroup, ErrorKind};
-
-static CONFLICT_ERR: &str = "error: The argument '--flag' cannot be used with '-F'
-
-USAGE:
-    clap-test --flag --long-option-2 <option2> <positional> <positional2>
-
-For more information try --help
-";
-
-static CONFLICT_ERR_REV: &str = "error: The argument '-F' cannot be used with '--flag'
-
-USAGE:
-    clap-test -F --long-option-2 <option2> <positional> <positional2>
-
-For more information try --help
-";
-
-static CONFLICT_ERR_THREE: &str = "error: The argument '--one' cannot be used with:
-    --two
-    --three
-
-USAGE:
-    three_conflicting_arguments --one
-
-For more information try --help
-";
+#[cfg(feature = "error-context")]
+use super::utils;
 
 #[test]
 fn flag_conflict() {
-    let result = App::new("flag_conflict")
+    let result = Command::new("flag_conflict")
         .arg(arg!(-f --flag "some flag").conflicts_with("other"))
         .arg(arg!(-o --other "some flag"))
         .try_get_matches_from(vec!["myprog", "-f", "-o"]);
     assert!(result.is_err());
     let err = result.err().unwrap();
-    assert_eq!(err.kind, ErrorKind::ArgumentConflict);
+    assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
 }
 
 #[test]
 fn flag_conflict_2() {
-    let result = App::new("flag_conflict")
+    let result = Command::new("flag_conflict")
         .arg(arg!(-f --flag "some flag").conflicts_with("other"))
         .arg(arg!(-o --other "some flag"))
         .try_get_matches_from(vec!["myprog", "-o", "-f"]);
     assert!(result.is_err());
     let err = result.err().unwrap();
-    assert_eq!(err.kind, ErrorKind::ArgumentConflict);
+    assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
 }
 
 #[test]
 fn flag_conflict_with_all() {
-    let result = App::new("flag_conflict")
-        .arg(arg!(-f --flag "some flag").conflicts_with_all(&["other"]))
+    let result = Command::new("flag_conflict")
+        .arg(arg!(-f --flag "some flag").conflicts_with_all(["other"]))
         .arg(arg!(-o --other "some flag"))
         .try_get_matches_from(vec!["myprog", "-o", "-f"]);
     assert!(result.is_err());
     let err = result.err().unwrap();
-    assert_eq!(err.kind, ErrorKind::ArgumentConflict);
+    assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
 }
 
 #[test]
-fn flag_conflict_with_everything() {
-    let result = App::new("flag_conflict")
+fn exclusive_flag() {
+    let cmd = Command::new("flag_conflict")
         .arg(arg!(-f --flag "some flag").exclusive(true))
-        .arg(arg!(-o --other "some flag"))
-        .try_get_matches_from(vec!["myprog", "-o", "-f"]);
+        .arg(arg!(-o --other "some flag"));
+    let result = cmd.clone().try_get_matches_from(vec!["myprog", "-f"]);
+    assert!(result.is_ok(), "{}", result.unwrap_err());
+
+    let result = cmd.clone().try_get_matches_from(vec!["myprog", "-o", "-f"]);
     assert!(result.is_err());
     let err = result.err().unwrap();
-    assert_eq!(err.kind, ErrorKind::ArgumentConflict);
+    assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
+}
+
+#[test]
+fn exclusive_option() {
+    let result = Command::new("flag_conflict")
+        .arg(arg!(-f --flag <VALUE> "some flag").exclusive(true))
+        .arg(arg!(-o --other <VALUE> "some flag"))
+        .try_get_matches_from(vec!["myprog", "-o=val1", "-f=val2"]);
+    assert!(result.is_err());
+    let err = result.err().unwrap();
+    assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
+}
+
+#[test]
+fn not_exclusive_with_defaults() {
+    let result = Command::new("flag_conflict")
+        .arg(arg!(-f --flag <VALUE> "some flag").exclusive(true))
+        .arg(
+            arg!(-o --other <VALUE> "some flag")
+                .required(false)
+                .default_value("val1"),
+        )
+        .try_get_matches_from(vec!["myprog", "-f=val2"]);
+    assert!(result.is_ok(), "{}", result.unwrap_err());
+}
+
+#[test]
+fn not_exclusive_with_group() {
+    let cmd = Command::new("test")
+        .group(ArgGroup::new("test").arg("foo"))
+        .arg(
+            Arg::new("foo")
+                .long("foo")
+                .exclusive(true)
+                .action(ArgAction::SetTrue),
+        );
+    let result = cmd.try_get_matches_from(vec!["test", "--foo"]);
+    assert!(result.is_ok(), "{}", result.unwrap_err());
+}
+
+#[test]
+fn default_doesnt_activate_exclusive() {
+    let result = Command::new("flag_conflict")
+        .arg(
+            arg!(-f --flag <VALUE> "some flag")
+                .exclusive(true)
+                .default_value("val2"),
+        )
+        .arg(arg!(-o --other <VALUE> "some flag").default_value("val1"))
+        .try_get_matches_from(vec!["myprog"]);
+    assert!(result.is_ok(), "{}", result.unwrap_err());
 }
 
 #[test]
 fn arg_conflicts_with_group() {
-    let mut app = App::new("group_conflict")
+    let mut cmd = Command::new("group_conflict")
         .arg(arg!(-f --flag "some flag").conflicts_with("gr"))
         .group(ArgGroup::new("gr").arg("some").arg("other"))
         .arg(arg!(--some "some arg"))
         .arg(arg!(--other "other arg"));
 
-    let result = app.try_get_matches_from_mut(vec!["myprog", "--other", "-f"]);
+    let result = cmd.try_get_matches_from_mut(vec!["myprog", "--other", "-f"]);
     assert!(result.is_err());
     let err = result.err().unwrap();
-    assert_eq!(err.kind, ErrorKind::ArgumentConflict);
+    assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
 
-    let result = app.try_get_matches_from_mut(vec!["myprog", "-f", "--some"]);
+    let result = cmd.try_get_matches_from_mut(vec!["myprog", "-f", "--some"]);
     assert!(result.is_err());
     let err = result.err().unwrap();
-    assert_eq!(err.kind, ErrorKind::ArgumentConflict);
+    assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
 
-    let result = app.try_get_matches_from_mut(vec!["myprog", "--some"]);
+    let result = cmd.try_get_matches_from_mut(vec!["myprog", "--some"]);
     if let Err(err) = result {
-        panic!("{}", err);
+        panic!("{err}");
     }
 
-    let result = app.try_get_matches_from_mut(vec!["myprog", "--other"]);
+    let result = cmd.try_get_matches_from_mut(vec!["myprog", "--other"]);
     if let Err(err) = result {
-        panic!("{}", err);
+        panic!("{err}");
     }
 
-    let result = app.try_get_matches_from_mut(vec!["myprog", "--flag"]);
+    let result = cmd.try_get_matches_from_mut(vec!["myprog", "--flag"]);
     if let Err(err) = result {
-        panic!("{}", err);
+        panic!("{err}");
     }
 }
 
 #[test]
+fn arg_conflicts_with_group_with_multiple_sources() {
+    let mut cmd = Command::new("group_conflict")
+        .arg(clap::arg!(-f --flag "some flag").conflicts_with("gr"))
+        .group(ArgGroup::new("gr").multiple(true))
+        .arg(clap::arg!(--some <name> "some arg").group("gr"))
+        .arg(
+            clap::arg!(--other <secs> "other arg")
+                .default_value("1000")
+                .group("gr"),
+        );
+
+    let result = cmd.try_get_matches_from_mut(vec!["myprog", "-f"]);
+    if let Err(err) = result {
+        panic!("{err}");
+    }
+
+    let result = cmd.try_get_matches_from_mut(vec!["myprog", "--some", "usb1"]);
+    if let Err(err) = result {
+        panic!("{err}");
+    }
+
+    let result = cmd.try_get_matches_from_mut(vec!["myprog", "--some", "usb1", "--other", "40"]);
+    if let Err(err) = result {
+        panic!("{err}");
+    }
+
+    let result = cmd.try_get_matches_from_mut(vec!["myprog", "-f", "--some", "usb1"]);
+    let err = result.err().unwrap();
+    assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
+}
+
+#[test]
 fn group_conflicts_with_arg() {
-    let mut app = App::new("group_conflict")
+    let mut cmd = Command::new("group_conflict")
         .arg(arg!(-f --flag "some flag"))
         .group(
             ArgGroup::new("gr")
@@ -119,64 +180,93 @@ fn group_conflicts_with_arg() {
         .arg(arg!(--some "some arg"))
         .arg(arg!(--other "other arg"));
 
-    let result = app.try_get_matches_from_mut(vec!["myprog", "--other", "-f"]);
+    let result = cmd.try_get_matches_from_mut(vec!["myprog", "--other", "-f"]);
     assert!(result.is_err());
     let err = result.err().unwrap();
-    assert_eq!(err.kind, ErrorKind::ArgumentConflict);
+    assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
 
-    let result = app.try_get_matches_from_mut(vec!["myprog", "-f", "--some"]);
+    let result = cmd.try_get_matches_from_mut(vec!["myprog", "-f", "--some"]);
     assert!(result.is_err());
     let err = result.err().unwrap();
-    assert_eq!(err.kind, ErrorKind::ArgumentConflict);
+    assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
 
-    let result = app.try_get_matches_from_mut(vec!["myprog", "--some"]);
+    let result = cmd.try_get_matches_from_mut(vec!["myprog", "--some"]);
     if let Err(err) = result {
-        panic!("{}", err);
+        panic!("{err}");
     }
 
-    let result = app.try_get_matches_from_mut(vec!["myprog", "--other"]);
+    let result = cmd.try_get_matches_from_mut(vec!["myprog", "--other"]);
     if let Err(err) = result {
-        panic!("{}", err);
+        panic!("{err}");
     }
 
-    let result = app.try_get_matches_from_mut(vec!["myprog", "--flag"]);
+    let result = cmd.try_get_matches_from_mut(vec!["myprog", "--flag"]);
     if let Err(err) = result {
-        panic!("{}", err);
+        panic!("{err}");
     }
 }
 
 #[test]
 fn arg_conflicts_with_required_group() {
-    let mut app = App::new("group_conflict")
+    let mut cmd = Command::new("group_conflict")
         .arg(arg!(-f --flag "some flag").conflicts_with("gr"))
         .group(ArgGroup::new("gr").required(true).arg("some").arg("other"))
         .arg(arg!(--some "some arg"))
         .arg(arg!(--other "other arg"));
 
-    let result = app.try_get_matches_from_mut(vec!["myprog", "--other", "-f"]);
+    let result = cmd.try_get_matches_from_mut(vec!["myprog", "--other", "-f"]);
     assert!(result.is_err());
     let err = result.err().unwrap();
-    assert_eq!(err.kind, ErrorKind::ArgumentConflict);
+    assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
 
-    let result = app.try_get_matches_from_mut(vec!["myprog", "-f", "--some"]);
+    let result = cmd.try_get_matches_from_mut(vec!["myprog", "-f", "--some"]);
     assert!(result.is_err());
     let err = result.err().unwrap();
-    assert_eq!(err.kind, ErrorKind::ArgumentConflict);
+    assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
 
-    let result = app.try_get_matches_from_mut(vec!["myprog", "--some"]);
+    let result = cmd.try_get_matches_from_mut(vec!["myprog", "--some"]);
     if let Err(err) = result {
-        panic!("{}", err);
+        panic!("{err}");
     }
 
-    let result = app.try_get_matches_from_mut(vec!["myprog", "--other"]);
+    let result = cmd.try_get_matches_from_mut(vec!["myprog", "--other"]);
     if let Err(err) = result {
-        panic!("{}", err);
+        panic!("{err}");
+    }
+}
+
+#[test]
+fn arg_conflicts_with_group_with_required_memeber() {
+    let mut cmd = Command::new("group_conflict")
+        .arg(arg!(-f --flag "some flag").conflicts_with("gr"))
+        .group(ArgGroup::new("gr").arg("some").arg("other"))
+        .arg(arg!(--some "some arg").required(true))
+        .arg(arg!(--other "other arg"));
+
+    let result = cmd.try_get_matches_from_mut(vec!["myprog", "--other", "-f"]);
+    assert!(result.is_err());
+    let err = result.err().unwrap();
+    assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
+
+    let result = cmd.try_get_matches_from_mut(vec!["myprog", "-f", "--some"]);
+    assert!(result.is_err());
+    let err = result.err().unwrap();
+    assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
+
+    let result = cmd.try_get_matches_from_mut(vec!["myprog", "--some"]);
+    if let Err(err) = result {
+        panic!("{err}");
+    }
+
+    let result = cmd.try_get_matches_from_mut(vec!["myprog", "--flag"]);
+    if let Err(err) = result {
+        panic!("{err}");
     }
 }
 
 #[test]
 fn required_group_conflicts_with_arg() {
-    let mut app = App::new("group_conflict")
+    let mut cmd = Command::new("group_conflict")
         .arg(arg!(-f --flag "some flag"))
         .group(
             ArgGroup::new("gr")
@@ -188,104 +278,189 @@ fn required_group_conflicts_with_arg() {
         .arg(arg!(--some "some arg"))
         .arg(arg!(--other "other arg"));
 
-    let result = app.try_get_matches_from_mut(vec!["myprog", "--other", "-f"]);
+    let result = cmd.try_get_matches_from_mut(vec!["myprog", "--other", "-f"]);
     assert!(result.is_err());
     let err = result.err().unwrap();
-    assert_eq!(err.kind, ErrorKind::ArgumentConflict);
+    assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
 
-    let result = app.try_get_matches_from_mut(vec!["myprog", "-f", "--some"]);
+    let result = cmd.try_get_matches_from_mut(vec!["myprog", "-f", "--some"]);
     assert!(result.is_err());
     let err = result.err().unwrap();
-    assert_eq!(err.kind, ErrorKind::ArgumentConflict);
+    assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
 
-    let result = app.try_get_matches_from_mut(vec!["myprog", "--some"]);
+    let result = cmd.try_get_matches_from_mut(vec!["myprog", "--some"]);
     if let Err(err) = result {
-        panic!("{}", err);
+        panic!("{err}");
     }
 
-    let result = app.try_get_matches_from_mut(vec!["myprog", "--other"]);
+    let result = cmd.try_get_matches_from_mut(vec!["myprog", "--other"]);
     if let Err(err) = result {
-        panic!("{}", err);
+        panic!("{err}");
     }
 }
 
 #[test]
+fn get_arg_conflicts_with_group() {
+    let flag = arg!(--flag).conflicts_with("gr");
+    let mut cmd = Command::new("group_conflict")
+        .arg(&flag)
+        .group(ArgGroup::new("gr").arg("some").arg("other"))
+        .arg(arg!(--some))
+        .arg(arg!(--other));
+
+    cmd.build();
+
+    let result = cmd.get_arg_conflicts_with(&flag);
+
+    assert_eq!(result.len(), 2);
+    assert_eq!(result[0].get_id(), "some");
+    assert_eq!(result[1].get_id(), "other");
+}
+
+#[test]
+#[cfg(feature = "error-context")]
 fn conflict_output() {
-    assert!(utils::compare_output(
+    static CONFLICT_ERR: &str = "\
+error: the argument '--flag...' cannot be used with '-F'
+
+Usage: clap-test --flag... --long-option-2 <option2> <positional> <positional2> [positional3]...
+
+For more information, try '--help'.
+";
+
+    utils::assert_output(
         utils::complex_app(),
         "clap-test val1 fa --flag --long-option-2 val2 -F",
         CONFLICT_ERR,
         true,
-    ));
+    );
 }
 
 #[test]
+#[cfg(feature = "error-context")]
 fn conflict_output_rev() {
-    assert!(utils::compare_output(
+    static CONFLICT_ERR_REV: &str = "\
+error: the argument '-F' cannot be used with '--flag...'
+
+Usage: clap-test -F --long-option-2 <option2> <positional> <positional2> [positional3]...
+
+For more information, try '--help'.
+";
+
+    utils::assert_output(
         utils::complex_app(),
         "clap-test val1 fa -F --long-option-2 val2 --flag",
         CONFLICT_ERR_REV,
         true,
-    ));
+    );
 }
 
 #[test]
+#[cfg(feature = "error-context")]
+fn conflict_output_repeat() {
+    static ERR: &str = "\
+error: the argument '-F' cannot be used multiple times
+
+Usage: clap-test [OPTIONS] [positional] [positional2] [positional3]... [COMMAND]
+
+For more information, try '--help'.
+";
+
+    utils::assert_output(utils::complex_app(), "clap-test -F -F", ERR, true);
+}
+
+#[test]
+#[cfg(feature = "error-context")]
 fn conflict_output_with_required() {
-    assert!(utils::compare_output(
+    static CONFLICT_ERR: &str = "\
+error: the argument '--flag...' cannot be used with '-F'
+
+Usage: clap-test --flag... --long-option-2 <option2> <positional> <positional2> [positional3]...
+
+For more information, try '--help'.
+";
+
+    utils::assert_output(
         utils::complex_app(),
         "clap-test val1 --flag --long-option-2 val2 -F",
         CONFLICT_ERR,
         true,
-    ));
+    );
 }
 
 #[test]
+#[cfg(feature = "error-context")]
 fn conflict_output_rev_with_required() {
-    assert!(utils::compare_output(
+    static CONFLICT_ERR_REV: &str = "\
+error: the argument '-F' cannot be used with '--flag...'
+
+Usage: clap-test -F --long-option-2 <option2> <positional> <positional2> [positional3]...
+
+For more information, try '--help'.
+";
+
+    utils::assert_output(
         utils::complex_app(),
         "clap-test val1 -F --long-option-2 val2 --flag",
         CONFLICT_ERR_REV,
         true,
-    ));
+    );
 }
 
 #[test]
+#[cfg(feature = "error-context")]
 fn conflict_output_three_conflicting() {
-    let app = App::new("three_conflicting_arguments")
+    static CONFLICT_ERR_THREE: &str = "\
+error: the argument '--one' cannot be used with:
+  --two
+  --three
+
+Usage: three_conflicting_arguments --one
+
+For more information, try '--help'.
+";
+
+    let cmd = Command::new("three_conflicting_arguments")
         .arg(
             Arg::new("one")
                 .long("one")
-                .conflicts_with_all(&["two", "three"]),
+                .action(ArgAction::SetTrue)
+                .conflicts_with_all(["two", "three"]),
         )
         .arg(
             Arg::new("two")
                 .long("two")
-                .conflicts_with_all(&["one", "three"]),
+                .action(ArgAction::SetTrue)
+                .conflicts_with_all(["one", "three"]),
         )
         .arg(
             Arg::new("three")
                 .long("three")
-                .conflicts_with_all(&["one", "two"]),
+                .action(ArgAction::SetTrue)
+                .conflicts_with_all(["one", "two"]),
         );
-    assert!(utils::compare_output(
-        app,
+    utils::assert_output(
+        cmd,
         "three_conflicting_arguments --one --two --three",
         CONFLICT_ERR_THREE,
         true,
-    ));
+    );
 }
 
 #[test]
+#[cfg(feature = "error-context")]
 fn two_conflicting_arguments() {
-    let a = App::new("two_conflicting_arguments")
+    let a = Command::new("two_conflicting_arguments")
         .arg(
             Arg::new("develop")
                 .long("develop")
+                .action(ArgAction::SetTrue)
                 .conflicts_with("production"),
         )
         .arg(
             Arg::new("production")
                 .long("production")
+                .action(ArgAction::SetTrue)
                 .conflicts_with("develop"),
         )
         .try_get_matches_from(vec!["", "--develop", "--production"]);
@@ -294,29 +469,33 @@ fn two_conflicting_arguments() {
     let a = a.unwrap_err();
     assert!(
         a.to_string()
-            .contains("The argument \'--develop\' cannot be used with \'--production\'"),
+            .contains("the argument \'--develop\' cannot be used with \'--production\'"),
         "{}",
         a
     );
 }
 
 #[test]
+#[cfg(feature = "error-context")]
 fn three_conflicting_arguments() {
-    let a = App::new("three_conflicting_arguments")
+    let a = Command::new("three_conflicting_arguments")
         .arg(
             Arg::new("one")
                 .long("one")
-                .conflicts_with_all(&["two", "three"]),
+                .action(ArgAction::SetTrue)
+                .conflicts_with_all(["two", "three"]),
         )
         .arg(
             Arg::new("two")
                 .long("two")
-                .conflicts_with_all(&["one", "three"]),
+                .action(ArgAction::SetTrue)
+                .conflicts_with_all(["one", "three"]),
         )
         .arg(
             Arg::new("three")
                 .long("three")
-                .conflicts_with_all(&["one", "two"]),
+                .action(ArgAction::SetTrue)
+                .conflicts_with_all(["one", "two"]),
         )
         .try_get_matches_from(vec!["", "--one", "--two", "--three"]);
 
@@ -324,7 +503,7 @@ fn three_conflicting_arguments() {
     let a = a.unwrap_err();
     assert!(
         a.to_string()
-            .contains("The argument \'--one\' cannot be used with:"),
+            .contains("the argument \'--one\' cannot be used with:"),
         "{}",
         a
     );
@@ -334,7 +513,7 @@ fn three_conflicting_arguments() {
 #[test]
 #[should_panic = "Argument 'config' cannot conflict with itself"]
 fn self_conflicting_arg() {
-    let _ = App::new("prog")
+    let _ = Command::new("prog")
         .arg(Arg::new("config").long("config").conflicts_with("config"))
         .try_get_matches_from(vec!["", "--config"]);
 }
@@ -343,39 +522,41 @@ fn self_conflicting_arg() {
 #[test]
 #[should_panic = "Argument or group 'extra' specified in 'conflicts_with*' for 'config' does not exist"]
 fn conflicts_with_invalid_arg() {
-    let _ = App::new("prog")
+    let _ = Command::new("prog")
         .arg(Arg::new("config").long("config").conflicts_with("extra"))
         .try_get_matches_from(vec!["", "--config"]);
 }
 
 #[test]
 fn conflict_with_unused_default() {
-    let result = App::new("conflict")
+    let result = Command::new("conflict")
+        .arg(arg!(-o --opt <opt> "some opt").default_value("default"))
         .arg(
-            arg!(-o --opt <opt> "some opt")
-                .required(false)
-                .default_value("default"),
+            arg!(-f --flag "some flag")
+                .conflicts_with("opt")
+                .action(ArgAction::SetTrue),
         )
-        .arg(arg!(-f --flag "some flag").conflicts_with("opt"))
         .try_get_matches_from(vec!["myprog", "-f"]);
 
     assert!(result.is_ok(), "{}", result.unwrap_err());
     let m = result.unwrap();
 
-    assert_eq!(m.value_of("opt"), Some("default"));
-    assert!(m.is_present("flag"));
+    assert_eq!(
+        m.get_one::<String>("opt").map(|v| v.as_str()),
+        Some("default")
+    );
+    assert!(*m.get_one::<bool>("flag").expect("defaulted by clap"));
 }
 
 #[test]
 fn conflicts_with_alongside_default() {
-    let result = App::new("conflict")
+    let result = Command::new("conflict")
         .arg(
             arg!(-o --opt <opt> "some opt")
                 .default_value("default")
-                .required(false)
                 .conflicts_with("flag"),
         )
-        .arg(arg!(-f --flag "some flag"))
+        .arg(arg!(-f --flag "some flag").action(ArgAction::SetTrue))
         .try_get_matches_from(vec!["myprog", "-f"]);
 
     assert!(
@@ -385,6 +566,425 @@ fn conflicts_with_alongside_default() {
     );
     let m = result.unwrap();
 
-    assert_eq!(m.value_of("opt"), Some("default"));
-    assert!(m.is_present("flag"));
+    assert_eq!(
+        m.get_one::<String>("opt").map(|v| v.as_str()),
+        Some("default")
+    );
+    assert!(*m.get_one::<bool>("flag").expect("defaulted by clap"));
+}
+
+#[test]
+fn group_in_conflicts_with() {
+    let result = Command::new("conflict")
+        .arg(
+            Arg::new("opt")
+                .long("opt")
+                .default_value("default")
+                .group("one"),
+        )
+        .arg(
+            Arg::new("flag")
+                .long("flag")
+                .conflicts_with("one")
+                .action(ArgAction::SetTrue),
+        )
+        .try_get_matches_from(vec!["myprog", "--flag"]);
+
+    assert!(
+        result.is_ok(),
+        "conflicts_with on an arg group should ignore default_value: {:?}",
+        result.unwrap_err()
+    );
+    let m = result.unwrap();
+
+    assert_eq!(
+        m.get_one::<String>("opt").map(|v| v.as_str()),
+        Some("default")
+    );
+    assert!(*m.get_one::<bool>("flag").expect("defaulted by clap"));
+}
+
+#[test]
+fn group_conflicts_with_default_value() {
+    let result = Command::new("conflict")
+        .arg(
+            Arg::new("opt")
+                .long("opt")
+                .default_value("default")
+                .group("one"),
+        )
+        .arg(
+            Arg::new("flag")
+                .long("flag")
+                .group("one")
+                .action(ArgAction::SetTrue),
+        )
+        .try_get_matches_from(vec!["myprog", "--flag"]);
+
+    assert!(
+        result.is_ok(),
+        "arg group count should ignore default_value: {:?}",
+        result.unwrap_err()
+    );
+    let m = result.unwrap();
+
+    assert_eq!(
+        m.get_one::<String>("opt").map(|v| v.as_str()),
+        Some("default")
+    );
+    assert!(*m.get_one::<bool>("flag").expect("defaulted by clap"));
+}
+
+#[test]
+fn group_conflicts_with_default_arg() {
+    let result = Command::new("conflict")
+        .arg(Arg::new("opt").long("opt").default_value("default"))
+        .arg(
+            Arg::new("flag")
+                .long("flag")
+                .group("one")
+                .action(ArgAction::SetTrue),
+        )
+        .group(ArgGroup::new("one").conflicts_with("opt"))
+        .try_get_matches_from(vec!["myprog", "--flag"]);
+
+    assert!(
+        result.is_ok(),
+        "arg group conflicts_with should ignore default_value: {:?}",
+        result.unwrap_err()
+    );
+    let m = result.unwrap();
+
+    assert_eq!(
+        m.get_one::<String>("opt").map(|v| v.as_str()),
+        Some("default")
+    );
+    assert!(*m.get_one::<bool>("flag").expect("defaulted by clap"));
+}
+
+#[test]
+fn exclusive_with_required() {
+    let cmd = Command::new("bug")
+        .arg(
+            Arg::new("test")
+                .long("test")
+                .action(ArgAction::SetTrue)
+                .exclusive(true),
+        )
+        .arg(Arg::new("input").action(ArgAction::Set).required(true));
+
+    cmd.clone()
+        .try_get_matches_from(["bug", "--test", "required"])
+        .unwrap_err();
+
+    cmd.clone()
+        .try_get_matches_from(["bug", "required"])
+        .unwrap();
+
+    cmd.clone().try_get_matches_from(["bug", "--test"]).unwrap();
+}
+
+#[test]
+fn exclusive_with_required_unless_present() {
+    let cmd = Command::new("bug")
+        .arg(
+            Arg::new("exclusive")
+                .long("exclusive")
+                .action(ArgAction::SetTrue)
+                .exclusive(true),
+        )
+        .arg(
+            Arg::new("required")
+                .long("required")
+                .action(ArgAction::SetTrue)
+                .required_unless_present("alternative"),
+        )
+        .arg(
+            Arg::new("alternative")
+                .long("alternative")
+                .action(ArgAction::SetTrue),
+        );
+
+    cmd.clone()
+        .try_get_matches_from(["bug", "--required"])
+        .unwrap();
+
+    cmd.clone()
+        .try_get_matches_from(["bug", "--alternative"])
+        .unwrap();
+
+    cmd.clone().try_get_matches_from(["bug"]).unwrap_err();
+
+    cmd.clone()
+        .try_get_matches_from(["bug", "--exclusive", "--required"])
+        .unwrap_err();
+
+    cmd.clone()
+        .try_get_matches_from(["bug", "--exclusive"])
+        .unwrap();
+}
+
+#[test]
+fn exclusive_with_required_unless_present_any() {
+    let cmd = Command::new("bug")
+        .arg(
+            Arg::new("exclusive")
+                .long("exclusive")
+                .action(ArgAction::SetTrue)
+                .exclusive(true),
+        )
+        .arg(
+            Arg::new("required")
+                .long("required")
+                .action(ArgAction::SetTrue)
+                .required_unless_present_any(["alternative"]),
+        )
+        .arg(
+            Arg::new("alternative")
+                .long("alternative")
+                .action(ArgAction::SetTrue),
+        );
+
+    cmd.clone()
+        .try_get_matches_from(["bug", "--required"])
+        .unwrap();
+
+    cmd.clone()
+        .try_get_matches_from(["bug", "--alternative"])
+        .unwrap();
+
+    cmd.clone().try_get_matches_from(["bug"]).unwrap_err();
+
+    cmd.clone()
+        .try_get_matches_from(["bug", "--exclusive", "--required"])
+        .unwrap_err();
+
+    cmd.clone()
+        .try_get_matches_from(["bug", "--exclusive"])
+        .unwrap();
+}
+
+#[test]
+fn exclusive_with_required_unless_present_all() {
+    let cmd = Command::new("bug")
+        .arg(
+            Arg::new("exclusive")
+                .long("exclusive")
+                .action(ArgAction::SetTrue)
+                .exclusive(true),
+        )
+        .arg(
+            Arg::new("required")
+                .long("required")
+                .action(ArgAction::SetTrue)
+                .required_unless_present_all(["alternative"]),
+        )
+        .arg(
+            Arg::new("alternative")
+                .long("alternative")
+                .action(ArgAction::SetTrue),
+        );
+
+    cmd.clone()
+        .try_get_matches_from(["bug", "--required"])
+        .unwrap();
+
+    cmd.clone()
+        .try_get_matches_from(["bug", "--alternative"])
+        .unwrap();
+
+    cmd.clone().try_get_matches_from(["bug"]).unwrap_err();
+
+    cmd.clone()
+        .try_get_matches_from(["bug", "--exclusive", "--required"])
+        .unwrap_err();
+
+    cmd.clone()
+        .try_get_matches_from(["bug", "--exclusive"])
+        .unwrap();
+}
+
+#[test]
+#[cfg(feature = "error-context")]
+fn option_conflicts_with_subcommand() {
+    static CONFLICT_ERR: &str = "\
+error: the subcommand 'sub1' cannot be used with '--place <place id>'
+
+Usage: test [OPTIONS]
+       test <COMMAND>
+
+For more information, try '--help'.
+";
+
+    let cmd = Command::new("test")
+        .args_conflicts_with_subcommands(true)
+        .arg(arg!(-p --place <"place id"> "Place ID to open"))
+        .subcommand(Command::new("sub1"));
+
+    utils::assert_output(cmd, "test --place id sub1", CONFLICT_ERR, true);
+}
+
+#[test]
+#[cfg(feature = "error-context")]
+fn positional_conflicts_with_subcommand() {
+    static CONFLICT_ERR: &str = "\
+error: the subcommand 'sub1' cannot be used with '<arg1>'
+
+Usage: test <arg1>
+       test <COMMAND>
+
+For more information, try '--help'.
+";
+
+    let cmd = Command::new("test")
+        .args_conflicts_with_subcommands(true)
+        .arg(arg!(<arg1> "some arg"))
+        .subcommand(Command::new("sub1"));
+
+    utils::assert_output(cmd, "test value1 sub1", CONFLICT_ERR, true);
+}
+
+#[test]
+#[cfg(feature = "error-context")]
+fn flag_conflicts_with_subcommand_long_flag() {
+    static CONFLICT_ERR: &str = "\
+error: the subcommand 'sub' cannot be used with '--hello'
+
+Usage: test [OPTIONS]
+       test <COMMAND>
+
+For more information, try '--help'.
+";
+
+    let cmd = Command::new("test")
+        .args_conflicts_with_subcommands(true)
+        .arg(arg!(--hello))
+        .subcommand(Command::new("sub").long_flag("sub"));
+
+    utils::assert_output(cmd, "test --hello --sub", CONFLICT_ERR, true);
+}
+
+#[test]
+#[cfg(feature = "error-context")]
+fn flag_conflicts_with_subcommand_short_flag() {
+    static CONFLICT_ERR: &str = "\
+error: the subcommand 'sub' cannot be used with '--hello'
+
+Usage: test [OPTIONS]
+       test <COMMAND>
+
+For more information, try '--help'.
+";
+
+    let cmd = Command::new("test")
+        .args_conflicts_with_subcommands(true)
+        .arg(arg!(--hello))
+        .subcommand(Command::new("sub").short_flag('s'));
+
+    utils::assert_output(cmd, "test --hello -s", CONFLICT_ERR, true);
+}
+
+#[test]
+#[cfg(feature = "error-context")]
+fn positional_conflicts_with_subcommand_precedent() {
+    static CONFLICT_ERR: &str = "\
+error: the subcommand 'sub' cannot be used with '<arg1>'
+
+Usage: test <arg1>
+       test <COMMAND>
+
+For more information, try '--help'.
+";
+
+    let cmd = Command::new("test")
+        .args_conflicts_with_subcommands(true)
+        .subcommand_precedence_over_arg(true)
+        .arg(arg!(<arg1> "some arg"))
+        .subcommand(Command::new("sub"));
+
+    utils::assert_output(cmd, "test hello sub", CONFLICT_ERR, true);
+}
+
+#[test]
+#[cfg(feature = "error-context")]
+fn flag_conflicts_with_subcommand_precedent() {
+    static CONFLICT_ERR: &str = "\
+error: the subcommand 'sub' cannot be used with '--hello'
+
+Usage: test [OPTIONS]
+       test <COMMAND>
+
+For more information, try '--help'.
+";
+
+    let cmd = Command::new("test")
+        .args_conflicts_with_subcommands(true)
+        .subcommand_precedence_over_arg(true)
+        .arg(arg!(--hello))
+        .subcommand(Command::new("sub"));
+
+    utils::assert_output(cmd, "test --hello sub", CONFLICT_ERR, true);
+}
+
+#[test]
+fn subcommand_conflict_negates_required() {
+    let cmd = Command::new("test")
+        .args_conflicts_with_subcommands(true)
+        .subcommand(Command::new("config"))
+        .arg(arg!(-p --place <"place id"> "Place ID to open").required(true));
+
+    let result = cmd.try_get_matches_from(["test", "config"]);
+    assert!(
+        result.is_ok(),
+        "args_conflicts_with_subcommands should ignore required: {}",
+        result.unwrap_err()
+    );
+    let m = result.unwrap();
+    assert_eq!(m.subcommand_name().unwrap(), "config");
+}
+
+#[test]
+fn args_negate_subcommands_one_level() {
+    let res = Command::new("disablehelp")
+        .args_conflicts_with_subcommands(true)
+        .subcommand_negates_reqs(true)
+        .arg(arg!(<arg1> "some arg"))
+        .arg(arg!(<arg2> "some arg"))
+        .subcommand(
+            Command::new("sub1").subcommand(Command::new("sub2").subcommand(Command::new("sub3"))),
+        )
+        .try_get_matches_from(vec!["", "pickles", "sub1"]);
+    assert!(res.is_ok(), "error: {:?}", res.unwrap_err().kind());
+    let m = res.unwrap();
+    assert_eq!(
+        m.get_one::<String>("arg2").map(|v| v.as_str()),
+        Some("sub1")
+    );
+}
+
+#[test]
+fn args_negate_subcommands_two_levels() {
+    let res = Command::new("disablehelp")
+        .args_conflicts_with_subcommands(true)
+        .subcommand_negates_reqs(true)
+        .arg(arg!(<arg1> "some arg"))
+        .arg(arg!(<arg2> "some arg"))
+        .subcommand(
+            Command::new("sub1")
+                .args_conflicts_with_subcommands(true)
+                .subcommand_negates_reqs(true)
+                .arg(arg!(<arg> "some"))
+                .arg(arg!(<arg2> "some"))
+                .subcommand(Command::new("sub2").subcommand(Command::new("sub3"))),
+        )
+        .try_get_matches_from(vec!["", "sub1", "arg", "sub2"]);
+    assert!(res.is_ok(), "error: {:?}", res.unwrap_err().kind());
+    let m = res.unwrap();
+    assert_eq!(
+        m.subcommand_matches("sub1")
+            .unwrap()
+            .get_one::<String>("arg2")
+            .map(|v| v.as_str()),
+        Some("sub2")
+    );
 }

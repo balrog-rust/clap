@@ -1,32 +1,19 @@
-/// Regression test to ensure that type aliases do not cause compilation failures.
-use std::str::FromStr;
+//! Regression test to ensure that type aliases do not cause compilation failures.
 
-use clap::{ArgEnum, Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
 // Result type alias
 #[allow(dead_code)]
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-// Wrapper to use for Option type alias
-#[derive(Debug, PartialEq, Eq)]
-struct Wrapper<T>(T);
-
-impl<T: FromStr> FromStr for Wrapper<T> {
-    type Err = <T as FromStr>::Err;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        T::from_str(s).map(Wrapper)
-    }
-}
-
-type Option<T> = std::option::Option<Wrapper<T>>;
+type Option<T> = std::option::Option<T>;
 
 #[derive(Parser)]
-pub struct Opts {
+pub(crate) struct Opts {
     another_string: String,
-    #[clap(subcommand)]
+    #[command(subcommand)]
     command: Command,
-    #[clap(short, long, arg_enum)]
+    #[arg(short, long, value_enum)]
     choice: ArgChoice,
 }
 
@@ -35,7 +22,7 @@ enum Command {
     DoSomething { arg: Option<String> },
 }
 
-#[derive(ArgEnum, PartialEq, Debug, Clone)]
+#[derive(ValueEnum, PartialEq, Debug, Clone)]
 enum ArgChoice {
     Foo,
     Bar,

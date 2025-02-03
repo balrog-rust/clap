@@ -1,123 +1,151 @@
-use crate::utils;
+use clap::builder::ArgPredicate;
+use clap::{arg, error::ErrorKind, Arg, ArgAction, ArgGroup, Command};
 
-use clap::{arg, App, Arg, ArgGroup, ErrorKind};
-
-static REQUIRE_EQUALS: &str = "error: The following required arguments were not provided:
-    --opt=<FILE>
-
-USAGE:
-    clap-test --opt=<FILE>
-
-For more information try --help
-";
-
-static REQUIRE_EQUALS_FILTERED: &str = "error: The following required arguments were not provided:
-    --opt=<FILE>
-
-USAGE:
-    clap-test --opt=<FILE> --foo=<FILE>
-
-For more information try --help
-";
-
-static REQUIRE_EQUALS_FILTERED_GROUP: &str =
-    "error: The following required arguments were not provided:
-    --opt=<FILE>
-
-USAGE:
-    clap-test --opt=<FILE> --foo=<FILE> <--g1=<FILE>|--g2=<FILE>>
-
-For more information try --help
-";
-
-static MISSING_REQ: &str = "error: The following required arguments were not provided:
-    --long-option-2 <option2>
-    <positional2>
-
-USAGE:
-    clap-test --long-option-2 <option2> -F <positional2>
-
-For more information try --help
-";
-
-static COND_REQ_IN_USAGE: &str = "error: The following required arguments were not provided:
-    --output <output>
-
-USAGE:
-    test --target <target> --input <input> --output <output>
-
-For more information try --help
-";
+#[cfg(feature = "error-context")]
+use super::utils;
 
 #[test]
 fn flag_required() {
-    let result = App::new("flag_required")
+    let result = Command::new("flag_required")
         .arg(arg!(-f --flag "some flag").requires("color"))
         .arg(arg!(-c --color "third flag"))
         .try_get_matches_from(vec!["", "-f"]);
     assert!(result.is_err());
     let err = result.err().unwrap();
-    assert_eq!(err.kind, ErrorKind::MissingRequiredArgument);
+    assert_eq!(err.kind(), ErrorKind::MissingRequiredArgument);
 }
 
 #[test]
 fn flag_required_2() {
-    let m = App::new("flag_required")
-        .arg(arg!(-f --flag "some flag").requires("color"))
-        .arg(arg!(-c --color "third flag"))
+    let m = Command::new("flag_required")
+        .arg(
+            arg!(-f --flag "some flag")
+                .requires("color")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(arg!(-c --color "third flag").action(ArgAction::SetTrue))
         .try_get_matches_from(vec!["", "-f", "-c"])
         .unwrap();
-    assert!(m.is_present("color"));
-    assert!(m.is_present("flag"));
+    assert!(*m.get_one::<bool>("color").expect("defaulted by clap"));
+    assert!(*m.get_one::<bool>("flag").expect("defaulted by clap"));
 }
 
 #[test]
 fn option_required() {
-    let result = App::new("option_required")
-        .arg(arg!(f: -f <flag> "some flag").required(false).requires("c"))
-        .arg(arg!(c: -c <color> "third flag").required(false))
+    let result = Command::new("option_required")
+        .arg(arg!(f: -f <flag> "some flag").requires("c"))
+        .arg(arg!(c: -c <color> "third flag"))
         .try_get_matches_from(vec!["", "-f", "val"]);
     assert!(result.is_err());
     let err = result.err().unwrap();
-    assert_eq!(err.kind, ErrorKind::MissingRequiredArgument);
+    assert_eq!(err.kind(), ErrorKind::MissingRequiredArgument);
 }
 
 #[test]
 fn option_required_2() {
-    let m = App::new("option_required")
-        .arg(arg!(f: -f <flag> "some flag").required(false).requires("c"))
-        .arg(arg!(c: -c <color> "third flag").required(false))
+    let m = Command::new("option_required")
+        .arg(arg!(f: -f <flag> "some flag").requires("c"))
+        .arg(arg!(c: -c <color> "third flag"))
         .try_get_matches_from(vec!["", "-f", "val", "-c", "other_val"])
         .unwrap();
-    assert!(m.is_present("c"));
-    assert_eq!(m.value_of("c").unwrap(), "other_val");
-    assert!(m.is_present("f"));
-    assert_eq!(m.value_of("f").unwrap(), "val");
+    assert!(m.contains_id("c"));
+    assert_eq!(
+        m.get_one::<String>("c").map(|v| v.as_str()).unwrap(),
+        "other_val"
+    );
+    assert!(m.contains_id("f"));
+    assert_eq!(m.get_one::<String>("f").map(|v| v.as_str()).unwrap(), "val");
 }
 
 #[test]
 fn positional_required() {
-    let result = App::new("positional_required")
+    let result = Command::new("positional_required")
         .arg(Arg::new("flag").index(1).required(true))
         .try_get_matches_from(vec![""]);
     assert!(result.is_err());
     let err = result.err().unwrap();
-    assert_eq!(err.kind, ErrorKind::MissingRequiredArgument);
+    assert_eq!(err.kind(), ErrorKind::MissingRequiredArgument);
 }
 
 #[test]
 fn positional_required_2() {
-    let m = App::new("positional_required")
+    let m = Command::new("positional_required")
         .arg(Arg::new("flag").index(1).required(true))
         .try_get_matches_from(vec!["", "someval"])
         .unwrap();
-    assert!(m.is_present("flag"));
-    assert_eq!(m.value_of("flag").unwrap(), "someval");
+    assert!(m.contains_id("flag"));
+    assert_eq!(
+        m.get_one::<String>("flag").map(|v| v.as_str()).unwrap(),
+        "someval"
+    );
+}
+
+#[test]
+#[cfg(feature = "error-context")]
+fn positional_required_with_requires() {
+    static POSITIONAL_REQ: &str = "\
+error: the following required arguments were not provided:
+  <flag>
+  <opt>
+
+Usage: clap-test <flag> <opt> [bar]
+
+For more information, try '--help'.
+";
+
+    let cmd = Command::new("positional_required")
+        .arg(Arg::new("flag").required(true).requires("opt"))
+        .arg(Arg::new("opt"))
+        .arg(Arg::new("bar"));
+
+    utils::assert_output(cmd, "clap-test", POSITIONAL_REQ, true);
+}
+
+#[test]
+#[cfg(feature = "error-context")]
+fn positional_required_with_requires_if_no_value() {
+    static POSITIONAL_REQ_IF_NO_VAL: &str = "\
+error: the following required arguments were not provided:
+  <flag>
+
+Usage: clap-test <flag> [opt] [bar]
+
+For more information, try '--help'.
+";
+
+    let cmd = Command::new("positional_required")
+        .arg(Arg::new("flag").required(true).requires_if("val", "opt"))
+        .arg(Arg::new("opt"))
+        .arg(Arg::new("bar"));
+
+    utils::assert_output(cmd, "clap-test", POSITIONAL_REQ_IF_NO_VAL, true);
+}
+
+#[test]
+#[cfg(feature = "error-context")]
+fn positional_required_with_requires_if_value() {
+    static POSITIONAL_REQ_IF_VAL: &str = "\
+error: the following required arguments were not provided:
+  <foo>
+  <opt>
+
+Usage: clap-test <flag> <foo> <opt> [bar]
+
+For more information, try '--help'.
+";
+
+    let cmd = Command::new("positional_required")
+        .arg(Arg::new("flag").required(true).requires_if("val", "opt"))
+        .arg(Arg::new("foo").required(true))
+        .arg(Arg::new("opt"))
+        .arg(Arg::new("bar"));
+
+    utils::assert_output(cmd, "clap-test val", POSITIONAL_REQ_IF_VAL, true);
 }
 
 #[test]
 fn group_required() {
-    let result = App::new("group_required")
+    let result = Command::new("group_required")
         .arg(arg!(-f --flag "some flag"))
         .group(ArgGroup::new("gr").required(true).arg("some").arg("other"))
         .arg(arg!(--some "some arg"))
@@ -125,40 +153,40 @@ fn group_required() {
         .try_get_matches_from(vec!["", "-f"]);
     assert!(result.is_err());
     let err = result.err().unwrap();
-    assert_eq!(err.kind, ErrorKind::MissingRequiredArgument);
+    assert_eq!(err.kind(), ErrorKind::MissingRequiredArgument);
 }
 
 #[test]
 fn group_required_2() {
-    let m = App::new("group_required")
-        .arg(arg!(-f --flag "some flag"))
+    let m = Command::new("group_required")
+        .arg(arg!(-f --flag "some flag").action(ArgAction::SetTrue))
         .group(ArgGroup::new("gr").required(true).arg("some").arg("other"))
-        .arg(arg!(--some "some arg"))
-        .arg(arg!(--other "other arg"))
+        .arg(arg!(--some "some arg").action(ArgAction::SetTrue))
+        .arg(arg!(--other "other arg").action(ArgAction::SetTrue))
         .try_get_matches_from(vec!["", "-f", "--some"])
         .unwrap();
-    assert!(m.is_present("some"));
-    assert!(!m.is_present("other"));
-    assert!(m.is_present("flag"));
+    assert!(*m.get_one::<bool>("some").expect("defaulted by clap"));
+    assert!(!*m.get_one::<bool>("other").expect("defaulted by clap"));
+    assert!(*m.get_one::<bool>("flag").expect("defaulted by clap"));
 }
 
 #[test]
 fn group_required_3() {
-    let m = App::new("group_required")
-        .arg(arg!(-f --flag "some flag"))
+    let m = Command::new("group_required")
+        .arg(arg!(-f --flag "some flag").action(ArgAction::SetTrue))
         .group(ArgGroup::new("gr").required(true).arg("some").arg("other"))
-        .arg(arg!(--some "some arg"))
-        .arg(arg!(--other "other arg"))
+        .arg(arg!(--some "some arg").action(ArgAction::SetTrue))
+        .arg(arg!(--other "other arg").action(ArgAction::SetTrue))
         .try_get_matches_from(vec!["", "-f", "--other"])
         .unwrap();
-    assert!(!m.is_present("some"));
-    assert!(m.is_present("other"));
-    assert!(m.is_present("flag"));
+    assert!(!*m.get_one::<bool>("some").expect("defaulted by clap"));
+    assert!(*m.get_one::<bool>("other").expect("defaulted by clap"));
+    assert!(*m.get_one::<bool>("flag").expect("defaulted by clap"));
 }
 
 #[test]
 fn arg_require_group() {
-    let result = App::new("arg_require_group")
+    let result = Command::new("arg_require_group")
         .arg(arg!(-f --flag "some flag").requires("gr"))
         .group(ArgGroup::new("gr").arg("some").arg("other"))
         .arg(arg!(--some "some arg"))
@@ -166,44 +194,52 @@ fn arg_require_group() {
         .try_get_matches_from(vec!["", "-f"]);
     assert!(result.is_err());
     let err = result.err().unwrap();
-    assert_eq!(err.kind, ErrorKind::MissingRequiredArgument);
+    assert_eq!(err.kind(), ErrorKind::MissingRequiredArgument);
 }
 
 #[test]
 fn arg_require_group_2() {
-    let res = App::new("arg_require_group")
-        .arg(arg!(-f --flag "some flag").requires("gr"))
+    let res = Command::new("arg_require_group")
+        .arg(
+            arg!(-f --flag "some flag")
+                .requires("gr")
+                .action(ArgAction::SetTrue),
+        )
         .group(ArgGroup::new("gr").arg("some").arg("other"))
-        .arg(arg!(--some "some arg"))
-        .arg(arg!(--other "other arg"))
+        .arg(arg!(--some "some arg").action(ArgAction::SetTrue))
+        .arg(arg!(--other "other arg").action(ArgAction::SetTrue))
         .try_get_matches_from(vec!["", "-f", "--some"]);
     assert!(res.is_ok(), "{}", res.unwrap_err());
     let m = res.unwrap();
-    assert!(m.is_present("some"));
-    assert!(!m.is_present("other"));
-    assert!(m.is_present("flag"));
+    assert!(*m.get_one::<bool>("some").expect("defaulted by clap"));
+    assert!(!*m.get_one::<bool>("other").expect("defaulted by clap"));
+    assert!(*m.get_one::<bool>("flag").expect("defaulted by clap"));
 }
 
 #[test]
 fn arg_require_group_3() {
-    let res = App::new("arg_require_group")
-        .arg(arg!(-f --flag "some flag").requires("gr"))
+    let res = Command::new("arg_require_group")
+        .arg(
+            arg!(-f --flag "some flag")
+                .requires("gr")
+                .action(ArgAction::SetTrue),
+        )
         .group(ArgGroup::new("gr").arg("some").arg("other"))
-        .arg(arg!(--some "some arg"))
-        .arg(arg!(--other "other arg"))
+        .arg(arg!(--some "some arg").action(ArgAction::SetTrue))
+        .arg(arg!(--other "other arg").action(ArgAction::SetTrue))
         .try_get_matches_from(vec!["", "-f", "--other"]);
     assert!(res.is_ok(), "{}", res.unwrap_err());
     let m = res.unwrap();
-    assert!(!m.is_present("some"));
-    assert!(m.is_present("other"));
-    assert!(m.is_present("flag"));
+    assert!(!*m.get_one::<bool>("some").expect("defaulted by clap"));
+    assert!(*m.get_one::<bool>("other").expect("defaulted by clap"));
+    assert!(*m.get_one::<bool>("flag").expect("defaulted by clap"));
 }
 
 // REQUIRED_UNLESS
 
 #[test]
 fn issue_753() {
-    let m = App::new("test")
+    let m = Command::new("test")
         .arg(arg!(
             -l --list "List available interfaces (and stop there)"
         ))
@@ -216,161 +252,162 @@ fn issue_753() {
         )
         .arg(
             arg!(-f --file <TESTFILE> "Fetch NTP packets from pcap file")
-                .required(false)
                 .conflicts_with("iface")
                 .required_unless_present("list"),
         )
-        .arg(
-            arg!(-s --server <SERVER_IP> "NTP server IP address")
-                .required(false)
-                .required_unless_present("list"),
-        )
+        .arg(arg!(-s --server <SERVER_IP> "NTP server IP address").required_unless_present("list"))
         .try_get_matches_from(vec!["test", "--list"]);
     assert!(m.is_ok(), "{}", m.unwrap_err());
 }
 
 #[test]
 fn required_unless_present() {
-    let res = App::new("unlesstest")
+    let res = Command::new("unlesstest")
         .arg(
             Arg::new("cfg")
                 .required_unless_present("dbg")
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .long("config"),
         )
-        .arg(Arg::new("dbg").long("debug"))
+        .arg(Arg::new("dbg").long("debug").action(ArgAction::SetTrue))
         .try_get_matches_from(vec!["unlesstest", "--debug"]);
 
     assert!(res.is_ok(), "{}", res.unwrap_err());
     let m = res.unwrap();
-    assert!(m.is_present("dbg"));
-    assert!(!m.is_present("cfg"));
+    assert!(*m.get_one::<bool>("dbg").expect("defaulted by clap"));
+    assert!(!m.contains_id("cfg"));
 }
 
 #[test]
-fn required_unless_err() {
-    let res = App::new("unlesstest")
+fn required_unless_present_err() {
+    let res = Command::new("unlesstest")
         .arg(
             Arg::new("cfg")
                 .required_unless_present("dbg")
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .long("config"),
         )
         .arg(Arg::new("dbg").long("debug"))
         .try_get_matches_from(vec!["unlesstest"]);
 
     assert!(res.is_err());
-    assert_eq!(res.unwrap_err().kind, ErrorKind::MissingRequiredArgument);
+    assert_eq!(res.unwrap_err().kind(), ErrorKind::MissingRequiredArgument);
 }
 
 #[test]
 fn required_unless_present_with_optional_value() {
-    let res = App::new("unlesstest")
-        .arg(Arg::new("opt").long("opt").min_values(0).max_values(1))
+    let res = Command::new("unlesstest")
+        .arg(Arg::new("opt").long("opt").num_args(0..=1))
         .arg(
             Arg::new("cfg")
                 .required_unless_present("dbg")
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .long("config"),
         )
         .arg(Arg::new("dbg").long("debug"))
         .try_get_matches_from(vec!["unlesstest", "--opt"]);
 
     assert!(res.is_err());
-    assert_eq!(res.unwrap_err().kind, ErrorKind::MissingRequiredArgument);
+    assert_eq!(res.unwrap_err().kind(), ErrorKind::MissingRequiredArgument);
 }
 
 // REQUIRED_UNLESS_ALL
 
 #[test]
 fn required_unless_present_all() {
-    let res = App::new("unlessall")
+    let res = Command::new("unlessall")
         .arg(
             Arg::new("cfg")
-                .required_unless_present_all(&["dbg", "infile"])
-                .takes_value(true)
+                .required_unless_present_all(["dbg", "infile"])
+                .action(ArgAction::Set)
                 .long("config"),
         )
-        .arg(Arg::new("dbg").long("debug"))
-        .arg(Arg::new("infile").short('i').takes_value(true))
+        .arg(Arg::new("dbg").long("debug").action(ArgAction::SetTrue))
+        .arg(Arg::new("infile").short('i').action(ArgAction::Set))
         .try_get_matches_from(vec!["unlessall", "--debug", "-i", "file"]);
 
     assert!(res.is_ok(), "{}", res.unwrap_err());
     let m = res.unwrap();
-    assert!(m.is_present("dbg"));
-    assert!(m.is_present("infile"));
-    assert!(!m.is_present("cfg"));
+    assert!(*m.get_one::<bool>("dbg").expect("defaulted by clap"));
+    assert!(m.contains_id("infile"));
+    assert!(!m.contains_id("cfg"));
 }
 
 #[test]
 fn required_unless_all_err() {
-    let res = App::new("unlessall")
+    let res = Command::new("unlessall")
         .arg(
             Arg::new("cfg")
-                .required_unless_present_all(&["dbg", "infile"])
-                .takes_value(true)
+                .required_unless_present_all(["dbg", "infile"])
+                .action(ArgAction::Set)
                 .long("config"),
         )
-        .arg(Arg::new("dbg").long("debug"))
-        .arg(Arg::new("infile").short('i').takes_value(true))
+        .arg(Arg::new("dbg").long("debug").action(ArgAction::SetTrue))
+        .arg(Arg::new("infile").short('i').action(ArgAction::Set))
         .try_get_matches_from(vec!["unlessall", "--debug"]);
 
     assert!(res.is_err());
-    assert_eq!(res.unwrap_err().kind, ErrorKind::MissingRequiredArgument);
+    assert_eq!(res.unwrap_err().kind(), ErrorKind::MissingRequiredArgument);
 }
 
 // REQUIRED_UNLESS_ONE
 
 #[test]
 fn required_unless_present_any() {
-    let res = App::new("unlessone")
+    let res = Command::new("unlessone")
         .arg(
             Arg::new("cfg")
-                .required_unless_present_any(&["dbg", "infile"])
-                .takes_value(true)
+                .required_unless_present_any(["dbg", "infile"])
+                .action(ArgAction::Set)
                 .long("config"),
         )
-        .arg(Arg::new("dbg").long("debug"))
-        .arg(Arg::new("infile").short('i').takes_value(true))
+        .arg(Arg::new("dbg").long("debug").action(ArgAction::SetTrue))
+        .arg(Arg::new("infile").short('i').action(ArgAction::Set))
         .try_get_matches_from(vec!["unlessone", "--debug"]);
 
     assert!(res.is_ok(), "{}", res.unwrap_err());
     let m = res.unwrap();
-    assert!(m.is_present("dbg"));
-    assert!(!m.is_present("cfg"));
+    assert!(*m.get_one::<bool>("dbg").expect("defaulted by clap"));
+    assert!(!m.contains_id("cfg"));
 }
 
 #[test]
 fn required_unless_any_2() {
     // This tests that the required_unless_present_any works when the second arg in the array is used
     // instead of the first.
-    let res = App::new("unlessone")
+    let res = Command::new("unlessone")
         .arg(
             Arg::new("cfg")
-                .required_unless_present_any(&["dbg", "infile"])
-                .takes_value(true)
+                .required_unless_present_any(["dbg", "infile"])
+                .action(ArgAction::Set)
                 .long("config"),
         )
-        .arg(Arg::new("dbg").long("debug"))
-        .arg(Arg::new("infile").short('i').takes_value(true))
+        .arg(Arg::new("dbg").long("debug").action(ArgAction::SetTrue))
+        .arg(Arg::new("infile").short('i').action(ArgAction::Set))
         .try_get_matches_from(vec!["unlessone", "-i", "file"]);
 
     assert!(res.is_ok(), "{}", res.unwrap_err());
     let m = res.unwrap();
-    assert!(m.is_present("infile"));
-    assert!(!m.is_present("cfg"));
+    assert!(m.contains_id("infile"));
+    assert!(!m.contains_id("cfg"));
 }
 
 #[test]
 fn required_unless_any_works_with_short() {
     // GitHub issue: https://github.com/clap-rs/clap/issues/1135
-    let res = App::new("unlessone")
-        .arg(Arg::new("a").conflicts_with("b").short('a'))
-        .arg(Arg::new("b").short('b'))
+    let res = Command::new("unlessone")
+        .arg(
+            Arg::new("a")
+                .conflicts_with("b")
+                .short('a')
+                .action(ArgAction::SetTrue),
+        )
+        .arg(Arg::new("b").short('b').action(ArgAction::SetTrue))
         .arg(
             Arg::new("x")
                 .short('x')
-                .required_unless_present_any(&["a", "b"]),
+                .action(ArgAction::SetTrue)
+                .required_unless_present_any(["a", "b"]),
         )
         .try_get_matches_from(vec!["unlessone", "-a"]);
 
@@ -379,13 +416,19 @@ fn required_unless_any_works_with_short() {
 
 #[test]
 fn required_unless_any_works_with_short_err() {
-    let res = App::new("unlessone")
-        .arg(Arg::new("a").conflicts_with("b").short('a'))
-        .arg(Arg::new("b").short('b'))
+    let res = Command::new("unlessone")
+        .arg(
+            Arg::new("a")
+                .conflicts_with("b")
+                .short('a')
+                .action(ArgAction::SetTrue),
+        )
+        .arg(Arg::new("b").short('b').action(ArgAction::SetTrue))
         .arg(
             Arg::new("x")
                 .short('x')
-                .required_unless_present_any(&["a", "b"]),
+                .action(ArgAction::SetTrue)
+                .required_unless_present_any(["a", "b"]),
         )
         .try_get_matches_from(vec!["unlessone"]);
 
@@ -394,10 +437,15 @@ fn required_unless_any_works_with_short_err() {
 
 #[test]
 fn required_unless_any_works_without() {
-    let res = App::new("unlessone")
-        .arg(Arg::new("a").conflicts_with("b").short('a'))
-        .arg(Arg::new("b").short('b'))
-        .arg(Arg::new("x").required_unless_present_any(&["a", "b"]))
+    let res = Command::new("unlessone")
+        .arg(
+            Arg::new("a")
+                .conflicts_with("b")
+                .short('a')
+                .action(ArgAction::SetTrue),
+        )
+        .arg(Arg::new("b").short('b').action(ArgAction::SetTrue))
+        .arg(Arg::new("x").required_unless_present_any(["a", "b"]))
         .try_get_matches_from(vec!["unlessone", "-a"]);
 
     assert!(res.is_ok(), "{}", res.unwrap_err());
@@ -405,13 +453,19 @@ fn required_unless_any_works_without() {
 
 #[test]
 fn required_unless_any_works_with_long() {
-    let res = App::new("unlessone")
-        .arg(Arg::new("a").conflicts_with("b").short('a'))
-        .arg(Arg::new("b").short('b'))
+    let res = Command::new("unlessone")
+        .arg(
+            Arg::new("a")
+                .conflicts_with("b")
+                .short('a')
+                .action(ArgAction::SetTrue),
+        )
+        .arg(Arg::new("b").short('b').action(ArgAction::SetTrue))
         .arg(
             Arg::new("x")
                 .long("x_is_the_option")
-                .required_unless_present_any(&["a", "b"]),
+                .action(ArgAction::SetTrue)
+                .required_unless_present_any(["a", "b"]),
         )
         .try_get_matches_from(vec!["unlessone", "-a"]);
 
@@ -420,97 +474,104 @@ fn required_unless_any_works_with_long() {
 
 #[test]
 fn required_unless_any_1() {
-    let res = App::new("unlessone")
+    let res = Command::new("unlessone")
         .arg(
             Arg::new("cfg")
-                .required_unless_present_any(&["dbg", "infile"])
-                .takes_value(true)
+                .required_unless_present_any(["dbg", "infile"])
+                .action(ArgAction::Set)
                 .long("config"),
         )
-        .arg(Arg::new("dbg").long("debug"))
-        .arg(Arg::new("infile").short('i').takes_value(true))
+        .arg(Arg::new("dbg").long("debug").action(ArgAction::SetTrue))
+        .arg(Arg::new("infile").short('i').action(ArgAction::Set))
         .try_get_matches_from(vec!["unlessone", "--debug"]);
 
     assert!(res.is_ok(), "{}", res.unwrap_err());
     let m = res.unwrap();
-    assert!(!m.is_present("infile"));
-    assert!(!m.is_present("cfg"));
-    assert!(m.is_present("dbg"));
+    assert!(!m.contains_id("infile"));
+    assert!(!m.contains_id("cfg"));
+    assert!(*m.get_one::<bool>("dbg").expect("defaulted by clap"));
 }
 
 #[test]
 fn required_unless_any_err() {
-    let res = App::new("unlessone")
+    let res = Command::new("unlessone")
         .arg(
             Arg::new("cfg")
-                .required_unless_present_any(&["dbg", "infile"])
-                .takes_value(true)
+                .required_unless_present_any(["dbg", "infile"])
+                .action(ArgAction::Set)
                 .long("config"),
         )
-        .arg(Arg::new("dbg").long("debug"))
-        .arg(Arg::new("infile").short('i').takes_value(true))
+        .arg(Arg::new("dbg").long("debug").action(ArgAction::SetTrue))
+        .arg(Arg::new("infile").short('i').action(ArgAction::Set))
         .try_get_matches_from(vec!["unlessone"]);
 
     assert!(res.is_err());
-    assert_eq!(res.unwrap_err().kind, ErrorKind::MissingRequiredArgument);
+    assert_eq!(res.unwrap_err().kind(), ErrorKind::MissingRequiredArgument);
 }
 
 #[test]
+#[cfg(feature = "error-context")]
 fn missing_required_output() {
-    assert!(utils::compare_output(
-        utils::complex_app(),
-        "clap-test -F",
-        MISSING_REQ,
-        true
-    ));
+    static MISSING_REQ: &str = "\
+error: the following required arguments were not provided:
+  --long-option-2 <option2>
+  <positional>
+  <positional2>
+
+Usage: clap-test --long-option-2 <option2> -F <positional> <positional2> [positional3]...
+
+For more information, try '--help'.
+";
+
+    utils::assert_output(utils::complex_app(), "clap-test -F", MISSING_REQ, true);
 }
 
 // Conditional external requirements
 
 #[test]
 fn requires_if_present_val() {
-    let res = App::new("unlessone")
+    let res = Command::new("unlessone")
         .arg(
             Arg::new("cfg")
                 .requires_if("my.cfg", "extra")
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .long("config"),
         )
-        .arg(Arg::new("extra").long("extra"))
+        .arg(Arg::new("extra").long("extra").action(ArgAction::SetTrue))
         .try_get_matches_from(vec!["unlessone", "--config=my.cfg"]);
 
     assert!(res.is_err());
-    assert_eq!(res.unwrap_err().kind, ErrorKind::MissingRequiredArgument);
+    assert_eq!(res.unwrap_err().kind(), ErrorKind::MissingRequiredArgument);
 }
 
 #[test]
 fn requires_if_present_mult() {
-    let res = App::new("unlessone")
+    let res = Command::new("unlessone")
         .arg(
             Arg::new("cfg")
-                .requires_ifs(&[("my.cfg", "extra"), ("other.cfg", "other")])
-                .takes_value(true)
+                .requires_ifs([("my.cfg", "extra"), ("other.cfg", "other")])
+                .action(ArgAction::Set)
                 .long("config"),
         )
-        .arg(Arg::new("extra").long("extra"))
-        .arg(Arg::new("other").long("other"))
+        .arg(Arg::new("extra").long("extra").action(ArgAction::SetTrue))
+        .arg(Arg::new("other").long("other").action(ArgAction::SetTrue))
         .try_get_matches_from(vec!["unlessone", "--config=other.cfg"]);
 
     assert!(res.is_err());
-    assert_eq!(res.unwrap_err().kind, ErrorKind::MissingRequiredArgument);
+    assert_eq!(res.unwrap_err().kind(), ErrorKind::MissingRequiredArgument);
 }
 
 #[test]
 fn requires_if_present_mult_pass() {
-    let res = App::new("unlessone")
+    let res = Command::new("unlessone")
         .arg(
             Arg::new("cfg")
-                .requires_ifs(&[("my.cfg", "extra"), ("other.cfg", "other")])
-                .takes_value(true)
+                .requires_ifs([("my.cfg", "extra"), ("other.cfg", "other")])
+                .action(ArgAction::Set)
                 .long("config"),
         )
-        .arg(Arg::new("extra").long("extra"))
-        .arg(Arg::new("other").long("other"))
+        .arg(Arg::new("extra").long("extra").action(ArgAction::SetTrue))
+        .arg(Arg::new("other").long("other").action(ArgAction::SetTrue))
         .try_get_matches_from(vec!["unlessone", "--config=some.cfg"]);
 
     assert!(res.is_ok(), "{}", res.unwrap_err());
@@ -518,14 +579,14 @@ fn requires_if_present_mult_pass() {
 
 #[test]
 fn requires_if_present_val_no_present_pass() {
-    let res = App::new("unlessone")
+    let res = Command::new("unlessone")
         .arg(
             Arg::new("cfg")
                 .requires_if("my.cfg", "extra")
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .long("config"),
         )
-        .arg(Arg::new("extra").long("extra"))
+        .arg(Arg::new("extra").long("extra").action(ArgAction::SetTrue))
         .try_get_matches_from(vec!["unlessone"]);
 
     assert!(res.is_ok(), "{}", res.unwrap_err());
@@ -535,14 +596,14 @@ fn requires_if_present_val_no_present_pass() {
 
 #[test]
 fn required_if_val_present_pass() {
-    let res = App::new("ri")
+    let res = Command::new("ri")
         .arg(
             Arg::new("cfg")
                 .required_if_eq("extra", "val")
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .long("config"),
         )
-        .arg(Arg::new("extra").takes_value(true).long("extra"))
+        .arg(Arg::new("extra").action(ArgAction::Set).long("extra"))
         .try_get_matches_from(vec!["ri", "--extra", "val", "--config", "my.cfg"]);
 
     assert!(res.is_ok(), "{}", res.unwrap_err());
@@ -550,32 +611,32 @@ fn required_if_val_present_pass() {
 
 #[test]
 fn required_if_val_present_fail() {
-    let res = App::new("ri")
+    let res = Command::new("ri")
         .arg(
             Arg::new("cfg")
                 .required_if_eq("extra", "val")
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .long("config"),
         )
-        .arg(Arg::new("extra").takes_value(true).long("extra"))
+        .arg(Arg::new("extra").action(ArgAction::Set).long("extra"))
         .try_get_matches_from(vec!["ri", "--extra", "val"]);
 
     assert!(res.is_err());
-    assert_eq!(res.unwrap_err().kind, ErrorKind::MissingRequiredArgument);
+    assert_eq!(res.unwrap_err().kind(), ErrorKind::MissingRequiredArgument);
 }
 
 #[test]
 fn required_if_val_present_ignore_case_pass() {
-    let res = App::new("ri")
+    let res = Command::new("ri")
         .arg(
             Arg::new("cfg")
                 .required_if_eq("extra", "Val")
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .long("config"),
         )
         .arg(
             Arg::new("extra")
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .long("extra")
                 .ignore_case(true),
         )
@@ -586,36 +647,36 @@ fn required_if_val_present_ignore_case_pass() {
 
 #[test]
 fn required_if_val_present_ignore_case_fail() {
-    let res = App::new("ri")
+    let res = Command::new("ri")
         .arg(
             Arg::new("cfg")
                 .required_if_eq("extra", "Val")
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .long("config"),
         )
         .arg(
             Arg::new("extra")
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .long("extra")
                 .ignore_case(true),
         )
         .try_get_matches_from(vec!["ri", "--extra", "vaL"]);
 
     assert!(res.is_err());
-    assert_eq!(res.unwrap_err().kind, ErrorKind::MissingRequiredArgument);
+    assert_eq!(res.unwrap_err().kind(), ErrorKind::MissingRequiredArgument);
 }
 
 #[test]
 fn required_if_all_values_present_pass() {
-    let res = App::new("ri")
+    let res = Command::new("ri")
         .arg(
             Arg::new("cfg")
-                .required_if_eq_all(&[("extra", "val"), ("option", "spec")])
-                .takes_value(true)
+                .required_if_eq_all([("extra", "val"), ("option", "spec")])
+                .action(ArgAction::Set)
                 .long("config"),
         )
-        .arg(Arg::new("extra").takes_value(true).long("extra"))
-        .arg(Arg::new("option").takes_value(true).long("option"))
+        .arg(Arg::new("extra").action(ArgAction::Set).long("extra"))
+        .arg(Arg::new("option").action(ArgAction::Set).long("option"))
         .try_get_matches_from(vec![
             "ri", "--extra", "val", "--option", "spec", "--config", "my.cfg",
         ]);
@@ -625,15 +686,15 @@ fn required_if_all_values_present_pass() {
 
 #[test]
 fn required_if_some_values_present_pass() {
-    let res = App::new("ri")
+    let res = Command::new("ri")
         .arg(
             Arg::new("cfg")
-                .required_if_eq_all(&[("extra", "val"), ("option", "spec")])
-                .takes_value(true)
+                .required_if_eq_all([("extra", "val"), ("option", "spec")])
+                .action(ArgAction::Set)
                 .long("config"),
         )
-        .arg(Arg::new("extra").takes_value(true).long("extra"))
-        .arg(Arg::new("option").takes_value(true).long("option"))
+        .arg(Arg::new("extra").action(ArgAction::Set).long("extra"))
+        .arg(Arg::new("option").action(ArgAction::Set).long("option"))
         .try_get_matches_from(vec!["ri", "--extra", "val"]);
 
     assert!(res.is_ok(), "{}", res.unwrap_err());
@@ -641,33 +702,33 @@ fn required_if_some_values_present_pass() {
 
 #[test]
 fn required_if_all_values_present_fail() {
-    let res = App::new("ri")
+    let res = Command::new("ri")
         .arg(
             Arg::new("cfg")
-                .required_if_eq_all(&[("extra", "val"), ("option", "spec")])
-                .takes_value(true)
+                .required_if_eq_all([("extra", "val"), ("option", "spec")])
+                .action(ArgAction::Set)
                 .long("config"),
         )
-        .arg(Arg::new("extra").takes_value(true).long("extra"))
-        .arg(Arg::new("option").takes_value(true).long("option"))
+        .arg(Arg::new("extra").action(ArgAction::Set).long("extra"))
+        .arg(Arg::new("option").action(ArgAction::Set).long("option"))
         .try_get_matches_from(vec!["ri", "--extra", "val", "--option", "spec"]);
 
     assert!(res.is_err());
-    assert_eq!(res.unwrap_err().kind, ErrorKind::MissingRequiredArgument);
+    assert_eq!(res.unwrap_err().kind(), ErrorKind::MissingRequiredArgument);
 }
 
 #[test]
 fn required_if_any_all_values_present_pass() {
-    let res = App::new("ri")
+    let res = Command::new("ri")
         .arg(
             Arg::new("cfg")
-                .required_if_eq_all(&[("extra", "val"), ("option", "spec")])
-                .required_if_eq_any(&[("extra", "val2"), ("option", "spec2")])
-                .takes_value(true)
+                .required_if_eq_all([("extra", "val"), ("option", "spec")])
+                .required_if_eq_any([("extra", "val2"), ("option", "spec2")])
+                .action(ArgAction::Set)
                 .long("config"),
         )
-        .arg(Arg::new("extra").takes_value(true).long("extra"))
-        .arg(Arg::new("option").takes_value(true).long("option"))
+        .arg(Arg::new("extra").action(ArgAction::Set).long("extra"))
+        .arg(Arg::new("option").action(ArgAction::Set).long("option"))
         .try_get_matches_from(vec![
             "ri", "--extra", "val", "--option", "spec", "--config", "my.cfg",
         ]);
@@ -677,100 +738,120 @@ fn required_if_any_all_values_present_pass() {
 
 #[test]
 fn required_if_any_all_values_present_fail() {
-    let res = App::new("ri")
+    let res = Command::new("ri")
         .arg(
             Arg::new("cfg")
-                .required_if_eq_all(&[("extra", "val"), ("option", "spec")])
-                .required_if_eq_any(&[("extra", "val2"), ("option", "spec2")])
-                .takes_value(true)
+                .required_if_eq_all([("extra", "val"), ("option", "spec")])
+                .required_if_eq_any([("extra", "val2"), ("option", "spec2")])
+                .action(ArgAction::Set)
                 .long("config"),
         )
-        .arg(Arg::new("extra").takes_value(true).long("extra"))
-        .arg(Arg::new("option").takes_value(true).long("option"))
+        .arg(Arg::new("extra").action(ArgAction::Set).long("extra"))
+        .arg(Arg::new("option").action(ArgAction::Set).long("option"))
         .try_get_matches_from(vec!["ri", "--extra", "val", "--option", "spec"]);
 
     assert!(res.is_err());
-    assert_eq!(res.unwrap_err().kind, ErrorKind::MissingRequiredArgument);
+    assert_eq!(res.unwrap_err().kind(), ErrorKind::MissingRequiredArgument);
 }
 
 #[test]
+#[cfg(feature = "error-context")]
 fn list_correct_required_args() {
-    let app = App::new("Test app")
+    static COND_REQ_IN_USAGE: &str = "\
+error: the following required arguments were not provided:
+  --output <output>
+
+Usage: test --target <target> --input <input> --output <output>
+
+For more information, try '--help'.
+";
+
+    let cmd = Command::new("Test cmd")
         .version("1.0")
         .author("F0x06")
         .about("Arg test")
         .arg(
             Arg::new("target")
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .required(true)
-                .possible_values(["file", "stdout"])
+                .value_parser(["file", "stdout"])
                 .long("target"),
         )
         .arg(
             Arg::new("input")
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .required(true)
                 .long("input"),
         )
         .arg(
             Arg::new("output")
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .required(true)
                 .long("output"),
         );
 
-    assert!(utils::compare_output(
-        app,
+    utils::assert_output(
+        cmd,
         "test --input somepath --target file",
         COND_REQ_IN_USAGE,
-        true
-    ));
+        true,
+    );
 }
 
 #[test]
+#[cfg(feature = "error-context")]
 fn required_if_val_present_fail_error_output() {
-    let app = App::new("Test app")
+    static COND_REQ_IN_USAGE: &str = "\
+error: the following required arguments were not provided:
+  --output <output>
+
+Usage: test --target <target> --input <input> --output <output>
+
+For more information, try '--help'.
+";
+
+    let cmd = Command::new("Test cmd")
         .version("1.0")
         .author("F0x06")
         .about("Arg test")
         .arg(
             Arg::new("target")
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .required(true)
-                .possible_values(&["file", "stdout"])
+                .value_parser(["file", "stdout"])
                 .long("target"),
         )
         .arg(
             Arg::new("input")
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .required(true)
                 .long("input"),
         )
         .arg(
             Arg::new("output")
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .required_if_eq("target", "file")
                 .long("output"),
         );
 
-    assert!(utils::compare_output(
-        app,
+    utils::assert_output(
+        cmd,
         "test --input somepath --target file",
         COND_REQ_IN_USAGE,
-        true
-    ));
+        true,
+    );
 }
 
 #[test]
 fn required_if_wrong_val() {
-    let res = App::new("ri")
+    let res = Command::new("ri")
         .arg(
             Arg::new("cfg")
                 .required_if_eq("extra", "val")
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .long("config"),
         )
-        .arg(Arg::new("extra").takes_value(true).long("extra"))
+        .arg(Arg::new("extra").action(ArgAction::Set).long("extra"))
         .try_get_matches_from(vec!["ri", "--extra", "other"]);
 
     assert!(res.is_ok(), "{}", res.unwrap_err());
@@ -778,15 +859,15 @@ fn required_if_wrong_val() {
 
 #[test]
 fn required_ifs_val_present_pass() {
-    let res = App::new("ri")
+    let res = Command::new("ri")
         .arg(
             Arg::new("cfg")
-                .required_if_eq_any(&[("extra", "val"), ("option", "spec")])
-                .takes_value(true)
+                .required_if_eq_any([("extra", "val"), ("option", "spec")])
+                .action(ArgAction::Set)
                 .long("config"),
         )
-        .arg(Arg::new("option").takes_value(true).long("option"))
-        .arg(Arg::new("extra").takes_value(true).long("extra"))
+        .arg(Arg::new("option").action(ArgAction::Set).long("option"))
+        .arg(Arg::new("extra").action(ArgAction::Set).long("extra"))
         .try_get_matches_from(vec!["ri", "--option", "spec", "--config", "my.cfg"]);
 
     assert!(res.is_ok(), "{}", res.unwrap_err());
@@ -794,32 +875,32 @@ fn required_ifs_val_present_pass() {
 
 #[test]
 fn required_ifs_val_present_fail() {
-    let res = App::new("ri")
+    let res = Command::new("ri")
         .arg(
             Arg::new("cfg")
-                .required_if_eq_any(&[("extra", "val"), ("option", "spec")])
-                .takes_value(true)
+                .required_if_eq_any([("extra", "val"), ("option", "spec")])
+                .action(ArgAction::Set)
                 .long("config"),
         )
-        .arg(Arg::new("extra").takes_value(true).long("extra"))
-        .arg(Arg::new("option").takes_value(true).long("option"))
+        .arg(Arg::new("extra").action(ArgAction::Set).long("extra"))
+        .arg(Arg::new("option").action(ArgAction::Set).long("option"))
         .try_get_matches_from(vec!["ri", "--option", "spec"]);
 
     assert!(res.is_err());
-    assert_eq!(res.unwrap_err().kind, ErrorKind::MissingRequiredArgument);
+    assert_eq!(res.unwrap_err().kind(), ErrorKind::MissingRequiredArgument);
 }
 
 #[test]
 fn required_ifs_wrong_val() {
-    let res = App::new("ri")
+    let res = Command::new("ri")
         .arg(
             Arg::new("cfg")
-                .required_if_eq_any(&[("extra", "val"), ("option", "spec")])
-                .takes_value(true)
+                .required_if_eq_any([("extra", "val"), ("option", "spec")])
+                .action(ArgAction::Set)
                 .long("config"),
         )
-        .arg(Arg::new("extra").takes_value(true).long("extra"))
-        .arg(Arg::new("option").takes_value(true).long("option"))
+        .arg(Arg::new("extra").action(ArgAction::Set).long("extra"))
+        .arg(Arg::new("option").action(ArgAction::Set).long("option"))
         .try_get_matches_from(vec!["ri", "--option", "other"]);
 
     assert!(res.is_ok(), "{}", res.unwrap_err());
@@ -827,24 +908,34 @@ fn required_ifs_wrong_val() {
 
 #[test]
 fn required_ifs_wrong_val_mult_fail() {
-    let res = App::new("ri")
+    let res = Command::new("ri")
         .arg(
             Arg::new("cfg")
-                .required_if_eq_any(&[("extra", "val"), ("option", "spec")])
-                .takes_value(true)
+                .required_if_eq_any([("extra", "val"), ("option", "spec")])
+                .action(ArgAction::Set)
                 .long("config"),
         )
-        .arg(Arg::new("extra").takes_value(true).long("extra"))
-        .arg(Arg::new("option").takes_value(true).long("option"))
+        .arg(Arg::new("extra").action(ArgAction::Set).long("extra"))
+        .arg(Arg::new("option").action(ArgAction::Set).long("option"))
         .try_get_matches_from(vec!["ri", "--extra", "other", "--option", "spec"]);
 
     assert!(res.is_err());
-    assert_eq!(res.unwrap_err().kind, ErrorKind::MissingRequiredArgument);
+    assert_eq!(res.unwrap_err().kind(), ErrorKind::MissingRequiredArgument);
 }
 
 #[test]
+#[cfg(feature = "error-context")]
 fn require_eq() {
-    let app = App::new("clap-test").version("v1.4.8").arg(
+    static REQUIRE_EQUALS: &str = "\
+error: the following required arguments were not provided:
+  --opt=<FILE>
+
+Usage: clap-test --opt=<FILE>
+
+For more information, try '--help'.
+";
+
+    let cmd = Command::new("clap-test").version("v1.4.8").arg(
         Arg::new("opt")
             .long("opt")
             .short('o')
@@ -853,17 +944,22 @@ fn require_eq() {
             .value_name("FILE")
             .help("some"),
     );
-    assert!(utils::compare_output(
-        app,
-        "clap-test",
-        REQUIRE_EQUALS,
-        true
-    ));
+    utils::assert_output(cmd, "clap-test", REQUIRE_EQUALS, true);
 }
 
 #[test]
+#[cfg(feature = "error-context")]
 fn require_eq_filtered() {
-    let app = App::new("clap-test")
+    static REQUIRE_EQUALS_FILTERED: &str = "\
+error: the following required arguments were not provided:
+  --opt=<FILE>
+
+Usage: clap-test --opt=<FILE> --foo=<FILE>
+
+For more information, try '--help'.
+";
+
+    let cmd = Command::new("clap-test")
         .version("v1.4.8")
         .arg(
             Arg::new("opt")
@@ -883,17 +979,22 @@ fn require_eq_filtered() {
                 .value_name("FILE")
                 .help("some other arg"),
         );
-    assert!(utils::compare_output(
-        app,
-        "clap-test -f=blah",
-        REQUIRE_EQUALS_FILTERED,
-        true
-    ));
+    utils::assert_output(cmd, "clap-test -f=blah", REQUIRE_EQUALS_FILTERED, true);
 }
 
 #[test]
+#[cfg(feature = "error-context")]
 fn require_eq_filtered_group() {
-    let app = App::new("clap-test")
+    static REQUIRE_EQUALS_FILTERED_GROUP: &str = "\
+error: the following required arguments were not provided:
+  --opt=<FILE>
+
+Usage: clap-test --opt=<FILE> --foo=<FILE> <--g1=<FILE>|--g2=<FILE>>
+
+For more information, try '--help'.
+";
+
+    let cmd = Command::new("clap-test")
         .version("v1.4.8")
         .arg(
             Arg::new("opt")
@@ -927,33 +1028,21 @@ fn require_eq_filtered_group() {
         )
         .group(
             ArgGroup::new("test_group")
-                .args(&["g1", "g2"])
+                .args(["g1", "g2"])
                 .required(true),
         );
-    assert!(utils::compare_output(
-        app,
+    utils::assert_output(
+        cmd,
         "clap-test -f=blah --g1=blah",
         REQUIRE_EQUALS_FILTERED_GROUP,
-        true
-    ));
+        true,
+    );
 }
 
-static ISSUE_1158: &str = "error: The following required arguments were not provided:
-    -x <X>
-    -y <Y>
-    -z <Z>
-
-USAGE:
-    example -x <X> -y <Y> -z <Z> <ID>
-
-For more information try --help
-";
-
-fn issue_1158_app() -> App<'static> {
-    App::new("example")
+fn issue_1158_app() -> Command {
+    Command::new("example")
         .arg(
             arg!(-c --config <FILE> "Custom config file.")
-                .required(false)
                 .required_unless_present("ID")
                 .conflicts_with("ID"),
         )
@@ -961,72 +1050,83 @@ fn issue_1158_app() -> App<'static> {
             arg!([ID] "ID")
                 .required_unless_present("config")
                 .conflicts_with("config")
-                .requires_all(&["x", "y", "z"]),
+                .requires_ifs([
+                    (ArgPredicate::IsPresent, "x"),
+                    (ArgPredicate::IsPresent, "y"),
+                    (ArgPredicate::IsPresent, "z"),
+                ]),
         )
-        .arg(arg!(x: -x <X> "X").required(false))
-        .arg(arg!(y: -y <Y> "Y").required(false))
-        .arg(arg!(z: -z <Z> "Z").required(false))
+        .arg(arg!(x: -x <X> "X"))
+        .arg(arg!(y: -y <Y> "Y"))
+        .arg(arg!(z: -z <Z> "Z"))
 }
 
 #[test]
+#[cfg(feature = "error-context")]
 fn multiple_required_unless_usage_printing() {
-    static MULTIPLE_REQUIRED_UNLESS_USAGE: &str =
-        "error: The following required arguments were not provided:
-    --a <a>
-    --b <b>
+    static MULTIPLE_REQUIRED_UNLESS_USAGE: &str = "\
+error: the following required arguments were not provided:
+  --a <a>
+  --b <b>
 
-USAGE:
-    test --c <c> --a <a> --b <b>
+Usage: test --c <c> --a <a> --b <b>
 
-For more information try --help
+For more information, try '--help'.
 ";
-    let app = App::new("test")
+    let cmd = Command::new("test")
         .arg(
             Arg::new("a")
                 .long("a")
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .required_unless_present("b")
                 .conflicts_with("b"),
         )
         .arg(
             Arg::new("b")
                 .long("b")
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .required_unless_present("a")
                 .conflicts_with("a"),
         )
         .arg(
             Arg::new("c")
                 .long("c")
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .required_unless_present("d")
                 .conflicts_with("d"),
         )
         .arg(
             Arg::new("d")
                 .long("d")
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .required_unless_present("c")
                 .conflicts_with("c"),
         );
-    assert!(utils::compare_output(
-        app,
-        "test --c asd",
-        MULTIPLE_REQUIRED_UNLESS_USAGE,
-        true
-    ));
+    utils::assert_output(cmd, "test --c asd", MULTIPLE_REQUIRED_UNLESS_USAGE, true);
 }
 
 #[test]
+#[cfg(feature = "error-context")]
 fn issue_1158_conflicting_requirements() {
-    let app = issue_1158_app();
+    static ISSUE_1158: &str = "\
+error: the following required arguments were not provided:
+  -x <X>
+  -y <Y>
+  -z <Z>
 
-    assert!(utils::compare_output(app, "example id", ISSUE_1158, true));
+Usage: example -x <X> -y <Y> -z <Z> <ID>
+
+For more information, try '--help'.
+";
+
+    let cmd = issue_1158_app();
+
+    utils::assert_output(cmd, "example id", ISSUE_1158, true);
 }
 
 #[test]
 fn issue_1158_conflicting_requirements_rev() {
-    let res = issue_1158_app().try_get_matches_from(&["", "--config", "some.conf"]);
+    let res = issue_1158_app().try_get_matches_from(["", "--config", "some.conf"]);
 
     assert!(res.is_ok(), "{}", res.unwrap_err());
 }
@@ -1035,13 +1135,13 @@ fn issue_1158_conflicting_requirements_rev() {
 fn issue_1643_args_mutually_require_each_other() {
     use clap::*;
 
-    let app = App::new("test")
+    let cmd = Command::new("test")
         .arg(
             Arg::new("relation_id")
                 .help("The relation id to get the data from")
                 .long("relation-id")
                 .short('r')
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .requires("remote_unit_name"),
         )
         .arg(
@@ -1049,96 +1149,102 @@ fn issue_1643_args_mutually_require_each_other() {
                 .help("The name of the remote unit to get data from")
                 .long("remote-unit")
                 .short('u')
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .requires("relation_id"),
         );
 
-    app.try_get_matches_from(&["test", "-u", "hello", "-r", "farewell"])
+    cmd.try_get_matches_from(["test", "-u", "hello", "-r", "farewell"])
         .unwrap();
 }
 
 #[test]
 fn short_flag_require_equals_with_minvals_zero() {
-    let m = App::new("foo")
+    let m = Command::new("foo")
         .arg(
             Arg::new("check")
                 .short('c')
-                .min_values(0)
+                .num_args(0..)
                 .require_equals(true),
         )
-        .arg(Arg::new("unique").short('u'))
-        .try_get_matches_from(&["foo", "-cu"])
+        .arg(Arg::new("unique").short('u').action(ArgAction::SetTrue))
+        .try_get_matches_from(["foo", "-cu"])
         .unwrap();
-    assert!(m.is_present("check"));
-    assert!(m.is_present("unique"));
+    assert!(m.contains_id("check"));
+    assert!(*m.get_one::<bool>("unique").expect("defaulted by clap"));
 }
 
 #[test]
 fn issue_2624() {
-    let matches = App::new("foo")
+    let matches = Command::new("foo")
         .arg(
             Arg::new("check")
                 .short('c')
                 .long("check")
                 .require_equals(true)
-                .min_values(0)
-                .possible_values(["silent", "quiet", "diagnose-first"]),
+                .num_args(0..)
+                .value_parser(["silent", "quiet", "diagnose-first"]),
         )
-        .arg(Arg::new("unique").short('u').long("unique"))
-        .try_get_matches_from(&["foo", "-cu"])
+        .arg(
+            Arg::new("unique")
+                .short('u')
+                .long("unique")
+                .action(ArgAction::SetTrue),
+        )
+        .try_get_matches_from(["foo", "-cu"])
         .unwrap();
-    assert!(matches.is_present("check"));
-    assert!(matches.is_present("unique"));
+    assert!(matches.contains_id("check"));
+    assert!(*matches
+        .get_one::<bool>("unique")
+        .expect("defaulted by clap"));
 }
 
 #[test]
 fn required_unless_all_with_any() {
-    let app = App::new("prog")
-        .arg(Arg::new("foo").long("foo"))
-        .arg(Arg::new("bar").long("bar"))
-        .arg(Arg::new("baz").long("baz"))
+    let cmd = Command::new("prog")
+        .arg(Arg::new("foo").long("foo").action(ArgAction::SetTrue))
+        .arg(Arg::new("bar").long("bar").action(ArgAction::SetTrue))
+        .arg(Arg::new("baz").long("baz").action(ArgAction::SetTrue))
         .arg(
             Arg::new("flag")
                 .long("flag")
-                .required_unless_present_any(&["foo"])
-                .required_unless_present_all(&["bar", "baz"]),
+                .action(ArgAction::SetTrue)
+                .required_unless_present_any(["foo"])
+                .required_unless_present_all(["bar", "baz"]),
         );
 
-    let result = app.clone().try_get_matches_from(vec!["myprog"]);
-
+    let result = cmd.clone().try_get_matches_from(vec!["myprog"]);
     assert!(result.is_err(), "{:?}", result.unwrap());
 
-    let result = app.clone().try_get_matches_from(vec!["myprog", "--foo"]);
-
+    let result = cmd.clone().try_get_matches_from(vec!["myprog", "--foo"]);
     assert!(result.is_ok(), "{:?}", result.unwrap_err());
-    assert!(!result.unwrap().is_present("flag"));
+    let matches = result.unwrap();
+    assert!(!*matches.get_one::<bool>("flag").expect("defaulted by clap"));
 
-    let result = app
+    let result = cmd
         .clone()
         .try_get_matches_from(vec!["myprog", "--bar", "--baz"]);
-
     assert!(result.is_ok(), "{:?}", result.unwrap_err());
-    assert!(!result.unwrap().is_present("flag"));
+    let matches = result.unwrap();
+    assert!(!*matches.get_one::<bool>("flag").expect("defaulted by clap"));
 
-    let result = app.try_get_matches_from(vec!["myprog", "--bar"]);
-
+    let result = cmd.try_get_matches_from(vec!["myprog", "--bar"]);
     assert!(result.is_err(), "{:?}", result.unwrap());
 }
 
 #[cfg(debug_assertions)]
 #[test]
-#[should_panic = "Argument or group 'extra' specified in 'requires*' for 'config' does not exist"]
+#[should_panic = "Command prog: Argument or group 'extra' specified in 'requires*' for 'config' does not exist"]
 fn requires_invalid_arg() {
-    let _ = App::new("prog")
+    let _ = Command::new("prog")
         .arg(Arg::new("config").requires("extra").long("config"))
         .try_get_matches_from(vec!["", "--config"]);
 }
 
 #[cfg(debug_assertions)]
 #[test]
-#[should_panic = "Argument or group 'extra' specified in 'requires*' for 'config' does not exist"]
+#[should_panic = "Command prog: Argument or group 'extra' specified in 'requires*' for 'config' does not exist"]
 fn requires_if_invalid_arg() {
-    let _ = App::new("prog")
+    let _ = Command::new("prog")
         .arg(
             Arg::new("config")
                 .requires_if("val", "extra")
@@ -1149,9 +1255,9 @@ fn requires_if_invalid_arg() {
 
 #[cfg(debug_assertions)]
 #[test]
-#[should_panic = "Argument or group 'extra' specified in 'required_if_eq*' for 'config' does not exist"]
+#[should_panic = "Command prog: Argument or group 'extra' specified in 'required_if_eq*' for 'config' does not exist"]
 fn required_if_invalid_arg() {
-    let _ = App::new("prog")
+    let _ = Command::new("prog")
         .arg(
             Arg::new("config")
                 .required_if_eq("extra", "val")
@@ -1162,13 +1268,221 @@ fn required_if_invalid_arg() {
 
 #[cfg(debug_assertions)]
 #[test]
-#[should_panic = "Argument or group 'extra' specified in 'required_unless*' for 'config' does not exist"]
+#[should_panic = "Command prog: Argument or group 'extra' specified in 'required_unless*' for 'config' does not exist"]
 fn required_unless_invalid_arg() {
-    let _ = App::new("prog")
+    let _ = Command::new("prog")
         .arg(
             Arg::new("config")
                 .required_unless_present("extra")
                 .long("config"),
         )
+        .try_get_matches_from(vec![""]);
+}
+
+#[test]
+fn requires_with_default_value() {
+    let result = Command::new("prog")
+        .arg(
+            Arg::new("opt")
+                .long("opt")
+                .default_value("default")
+                .requires("flag"),
+        )
+        .arg(Arg::new("flag").long("flag").action(ArgAction::SetTrue))
+        .try_get_matches_from(vec!["myprog"]);
+
+    assert!(
+        result.is_ok(),
+        "requires should ignore default_value: {:?}",
+        result.unwrap_err()
+    );
+    let m = result.unwrap();
+
+    assert_eq!(
+        m.get_one::<String>("opt").map(|v| v.as_str()),
+        Some("default")
+    );
+    assert!(!*m.get_one::<bool>("flag").expect("defaulted by clap"));
+}
+
+#[test]
+fn requires_if_with_default_value() {
+    let result = Command::new("prog")
+        .arg(
+            Arg::new("opt")
+                .long("opt")
+                .default_value("default")
+                .requires_if("default", "flag"),
+        )
+        .arg(Arg::new("flag").long("flag").action(ArgAction::SetTrue))
+        .try_get_matches_from(vec!["myprog"]);
+
+    assert!(
+        result.is_ok(),
+        "requires_if should ignore default_value: {:?}",
+        result.unwrap_err()
+    );
+    let m = result.unwrap();
+
+    assert_eq!(
+        m.get_one::<String>("opt").map(|v| v.as_str()),
+        Some("default")
+    );
+    assert!(!*m.get_one::<bool>("flag").expect("defaulted by clap"));
+}
+
+#[test]
+fn group_requires_with_default_value() {
+    let result = Command::new("prog")
+        .arg(Arg::new("opt").long("opt").default_value("default"))
+        .arg(Arg::new("flag").long("flag").action(ArgAction::SetTrue))
+        .group(ArgGroup::new("one").arg("opt").requires("flag"))
+        .try_get_matches_from(vec!["myprog"]);
+
+    assert!(
+        result.is_ok(),
+        "arg group requires should ignore default_value: {:?}",
+        result.unwrap_err()
+    );
+    let m = result.unwrap();
+
+    assert_eq!(
+        m.get_one::<String>("opt").map(|v| v.as_str()),
+        Some("default")
+    );
+    assert!(!*m.get_one::<bool>("flag").expect("defaulted by clap"));
+}
+
+#[test]
+fn required_if_eq_on_default_value() {
+    let result = Command::new("prog")
+        .arg(Arg::new("opt").long("opt").default_value("default"))
+        .arg(
+            Arg::new("flag")
+                .long("flag")
+                .action(ArgAction::SetTrue)
+                .required_if_eq("opt", "default"),
+        )
+        .try_get_matches_from(vec!["myprog"]);
+
+    assert!(
+        result.is_ok(),
+        "required_if_eq should ignore default_value: {:?}",
+        result.unwrap_err()
+    );
+    let m = result.unwrap();
+
+    assert_eq!(
+        m.get_one::<String>("opt").map(|v| v.as_str()),
+        Some("default")
+    );
+    assert!(!*m.get_one::<bool>("flag").expect("defaulted by clap"));
+}
+
+#[test]
+fn required_if_eq_all_on_default_value() {
+    let result = Command::new("prog")
+        .arg(Arg::new("opt").long("opt").default_value("default"))
+        .arg(
+            Arg::new("flag")
+                .long("flag")
+                .action(ArgAction::SetTrue)
+                .required_if_eq_all([("opt", "default")]),
+        )
+        .try_get_matches_from(vec!["myprog"]);
+
+    assert!(
+        result.is_ok(),
+        "required_if_eq_all should ignore default_value: {:?}",
+        result.unwrap_err()
+    );
+    let m = result.unwrap();
+
+    assert_eq!(
+        m.get_one::<String>("opt").map(|v| v.as_str()),
+        Some("default")
+    );
+    assert!(!*m.get_one::<bool>("flag").expect("defaulted by clap"));
+}
+
+#[test]
+fn required_unless_on_default_value() {
+    let result = Command::new("prog")
+        .arg(Arg::new("opt").long("opt").default_value("default"))
+        .arg(Arg::new("flag").long("flag").required_unless_present("opt"))
+        .try_get_matches_from(vec!["myprog"]);
+
+    assert!(result.is_err(), "{:?}", result.unwrap());
+}
+
+#[test]
+fn required_unless_all_on_default_value() {
+    let result = Command::new("prog")
+        .arg(Arg::new("opt").long("opt").default_value("default"))
+        .arg(
+            Arg::new("flag")
+                .long("flag")
+                .required_unless_present_all(["opt"]),
+        )
+        .try_get_matches_from(vec!["myprog"]);
+
+    assert!(result.is_err(), "{:?}", result.unwrap());
+}
+
+#[test]
+#[cfg(feature = "error-context")]
+fn required_error_doesnt_duplicate() {
+    let cmd = Command::new("Clap-created-USAGE-string-bug")
+        .arg(Arg::new("a").required(true))
+        .arg(
+            Arg::new("b")
+                .short('b')
+                .action(ArgAction::Set)
+                .conflicts_with("c"),
+        )
+        .arg(
+            Arg::new("c")
+                .short('c')
+                .action(ArgAction::Set)
+                .conflicts_with("b"),
+        );
+    const EXPECTED: &str = "\
+error: the argument '-b <b>' cannot be used with '-c <c>'
+
+Usage: clap-test -b <b> <a>
+
+For more information, try '--help'.
+";
+    utils::assert_output(cmd, "clap-test aaa -b bbb -c ccc", EXPECTED, true);
+}
+
+#[test]
+#[cfg(feature = "error-context")]
+fn required_require_with_group_shows_flag() {
+    let cmd = Command::new("test")
+        .arg(arg!(--"require-first").requires("first"))
+        .arg(arg!(--first).group("either_or_both"))
+        .arg(arg!(--second).group("either_or_both"))
+        .group(
+            ArgGroup::new("either_or_both")
+                .multiple(true)
+                .required(true),
+        );
+    const EXPECTED: &str = "\
+error: the following required arguments were not provided:
+  --first
+
+Usage: test --require-first <--first|--second>
+
+For more information, try '--help'.
+";
+    utils::assert_output(cmd, "test --require-first --second", EXPECTED, true);
+}
+
+#[test]
+#[should_panic = "Argument flag cannot require itself"]
+fn requires_self() {
+    let _result = Command::new("flag_required")
+        .arg(arg!(-f --flag "some flag").requires("flag"))
         .try_get_matches_from(vec![""]);
 }

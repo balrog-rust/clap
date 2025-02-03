@@ -1,9 +1,9 @@
 # These settings are synced to GitHub by https://probot.github.io/apps/settings/
 
 repository:
-  description: A full featured, fast Command Line Argument Parser for Rust
-  homepage: docs.rs/clap
-  topics: rust cli command-line argparse clap
+  description: "A full featured, fast Command Line Argument Parser for Rust"
+  homepage: "docs.rs/clap"
+  topics: "rust cli command-line argparse clap"
   has_issues: true
   has_projects: false
   has_wiki: false
@@ -17,8 +17,12 @@ repository:
   # Not really needed
   allow_rebase_merge: false
 
-  # Manual: allow_auto_merge: true, see https://github.com/probot/settings/issues/402
+  allow_auto_merge: true
   delete_branch_on_merge: true
+
+  squash_merge_commit_title: "PR_TITLE"
+  squash_merge_commit_message: "PR_BODY"
+  merge_commit_message: "PR_BODY"
 
 #labels:
 #  - name: "A-builder"
@@ -97,14 +101,18 @@ repository:
 #    description: "Meta: Request for post-merge review."
 #    color: '#E10C02'
 
-branches:
-  - name: master
-    protection:
-      required_pull_request_reviews: null
-      required_conversation_resolution: true
-      required_status_checks:
-        # Required. Require branches to be up to date before merging.
-        strict: false
-        contexts: ["CI", "Lint Commits", "Spell Check with Typos"]
-      enforce_admins: false
-      restrictions: null
+# This serves more as documentation.
+# Branch protection API was replaced by rulesets but settings isn't updated.
+# See https://github.com/repository-settings/app/issues/825
+#
+# branches:
+#   - name: master
+#     protection:
+#       required_pull_request_reviews: null
+#       required_conversation_resolution: true
+#       required_status_checks:
+#         # Required. Require branches to be up to date before merging.
+#         strict: false
+#         contexts: ["CI", "Spell Check with Typos"]
+#       enforce_admins: false
+#       restrictions: null

@@ -12,6 +12,7 @@
 // commit#ea76fa1b1b273e65e3b0b1046643715b49bec51f which is licensed under the
 // MIT/Apache 2.0 license.
 
+#![deny(unused_qualifications)]
 #![deny(warnings)]
 
 use clap::Parser;
@@ -24,14 +25,14 @@ fn try_str(s: &str) -> Result<String, std::convert::Infallible> {
 fn warning_never_struct() {
     #[derive(Parser, Debug, PartialEq)]
     struct Opt {
-        #[clap(parse(try_from_str = try_str), default_value_t)]
+        #[arg(value_parser = try_str, default_value_t)]
         s: String,
     }
     assert_eq!(
         Opt {
             s: "foo".to_string()
         },
-        Opt::try_parse_from(&["test", "foo"]).unwrap()
+        Opt::try_parse_from(["test", "foo"]).unwrap()
     );
 }
 
@@ -40,7 +41,7 @@ fn warning_never_enum() {
     #[derive(Parser, Debug, PartialEq)]
     enum Opt {
         Foo {
-            #[clap(parse(try_from_str = try_str), default_value_t)]
+            #[arg(value_parser = try_str, default_value_t)]
             s: String,
         },
     }
@@ -48,6 +49,19 @@ fn warning_never_enum() {
         Opt::Foo {
             s: "foo".to_string()
         },
-        Opt::try_parse_from(&["test", "foo", "foo"]).unwrap()
+        Opt::try_parse_from(["test", "foo", "foo"]).unwrap()
     );
+}
+
+#[test]
+fn warning_unused_qualifications() {
+    // This causes `clap::Args` within the derive to be unused qualifications
+    use clap::Args;
+
+    #[derive(Args, Clone, Copy, Debug, Default)]
+    #[group(skip)]
+    pub(crate) struct Compose<L: Args> {
+        #[command(flatten)]
+        pub(crate) left: L,
+    }
 }

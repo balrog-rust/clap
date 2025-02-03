@@ -18,12 +18,12 @@ use clap::Parser;
 fn basic() {
     #[derive(Parser, PartialEq, Debug)]
     struct Opt {
-        #[clap(short = 'a', long = "arg")]
+        #[arg(short = 'a', long = "arg")]
         arg: i32,
     }
     assert_eq!(
         Opt { arg: 24 },
-        Opt::try_parse_from(&["test", "-a24"]).unwrap()
+        Opt::try_parse_from(["test", "-a24"]).unwrap()
     );
 }
 
@@ -31,15 +31,46 @@ fn basic() {
 fn update_basic() {
     #[derive(Parser, PartialEq, Debug)]
     struct Opt {
-        #[clap(short = 'a', long = "arg")]
-        single_value: i32,
+        #[arg(short, long)]
+        first: i32,
+        #[arg(short, long)]
+        second: i32,
     }
 
-    let mut opt = Opt::try_parse_from(&["test", "-a0"]).unwrap();
+    let mut opt = Opt::try_parse_from(["test", "-f0", "-s1"]).unwrap();
 
-    opt.update_from(&["test", "-a42"]);
+    opt.try_update_from(["test", "-f42"]).unwrap();
 
-    assert_eq!(Opt { single_value: 42 }, opt);
+    assert_eq!(
+        Opt {
+            first: 42,
+            second: 1
+        },
+        opt
+    );
+}
+
+#[test]
+fn update_explicit_required() {
+    #[derive(Parser, PartialEq, Debug)]
+    struct Opt {
+        #[arg(short, long, required = true)]
+        first: i32,
+        #[arg(short, long, required = true)]
+        second: i32,
+    }
+
+    let mut opt = Opt::try_parse_from(["test", "-f0", "-s1"]).unwrap();
+
+    opt.try_update_from(["test", "-f42"]).unwrap();
+
+    assert_eq!(
+        Opt {
+            first: 42,
+            second: 1
+        },
+        opt
+    );
 }
 
 #[test]
@@ -47,5 +78,5 @@ fn unit_struct() {
     #[derive(Parser, PartialEq, Debug)]
     struct Opt;
 
-    assert_eq!(Opt {}, Opt::try_parse_from(&["test"]).unwrap());
+    assert_eq!(Opt {}, Opt::try_parse_from(["test"]).unwrap());
 }

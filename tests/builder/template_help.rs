@@ -1,151 +1,161 @@
-use crate::utils;
+use super::utils;
 
-use clap::{arg, App};
+use clap::{arg, Command};
 
+#[cfg(not(feature = "unstable-v5"))]
 static EXAMPLE1_TMPL_S: &str = "{bin} {version}
 {author}
 {about}
 
-USAGE:
-    {usage}
+Usage: {usage}
 
 {all-args}";
 
+#[cfg(feature = "unstable-v5")]
+static EXAMPLE1_TMPL_S: &str = "{name} {version}
+{author}
+{about}
+
+Usage: {usage}
+
+{all-args}";
+
+#[cfg(not(feature = "unstable-v5"))]
 static EXAMPLE1_TMPS_F: &str = "{bin} {version}
 {author}
 {about}
 
-USAGE:
-    {usage}
+Usage: {usage}
 
-OPTIONS:
+Options:
 {options}
-ARGS:
+Arguments:
 {positionals}
-SUBCOMMANDS:
+Commands:
+{subcommands}";
+
+#[cfg(feature = "unstable-v5")]
+static EXAMPLE1_TMPS_F: &str = "{name} {version}
+{author}
+{about}
+
+Usage: {usage}
+
+Options:
+{options}
+Arguments:
+{positionals}
+Commands:
 {subcommands}";
 
 static CUSTOM_TEMPL_HELP: &str = "MyApp 1.0
 Kevin K. <kbknapp@gmail.com>
 Does awesome things
 
-USAGE:
-    MyApp [OPTIONS] <output> [SUBCOMMAND]
+Usage: MyApp [OPTIONS] <output> [COMMAND]
 
-OPTIONS:
-    -c, --config <FILE>    Sets a custom config file
-    -d                     Turn debugging information on
-    -h, --help             Print help information
-    -V, --version          Print version information
-ARGS:
-    <output>    Sets an optional output file
-SUBCOMMANDS:
-    help    Print this message or the help of the given subcommand(s)
-    test    does testing things
+Options:
+  -c, --config <FILE>  Sets a custom config file
+  -d...                Turn debugging information on
+  -h, --help           Print help
+  -V, --version        Print version
+Arguments:
+  <output>  Sets an optional output file
+Commands:
+  test  does testing things
+  help  Print this message or the help of the given subcommand(s)
 ";
 
 static SIMPLE_TEMPLATE: &str = "MyApp 1.0
 Kevin K. <kbknapp@gmail.com>
 Does awesome things
 
-USAGE:
-    MyApp [OPTIONS] <output> [SUBCOMMAND]
+Usage: MyApp [OPTIONS] <output> [COMMAND]
 
-ARGS:
-    <output>    Sets an optional output file
+Commands:
+  test  does testing things
+  help  Print this message or the help of the given subcommand(s)
 
-OPTIONS:
-    -c, --config <FILE>    Sets a custom config file
-    -d                     Turn debugging information on
-    -h, --help             Print help information
-    -V, --version          Print version information
+Arguments:
+  <output>  Sets an optional output file
 
-SUBCOMMANDS:
-    help    Print this message or the help of the given subcommand(s)
-    test    does testing things
+Options:
+  -c, --config <FILE>  Sets a custom config file
+  -d...                Turn debugging information on
+  -h, --help           Print help
+  -V, --version        Print version
 ";
 
 #[test]
 fn with_template() {
-    let app = get_app().help_template(EXAMPLE1_TMPL_S);
-    assert!(utils::compare_output(
-        app,
-        "MyApp --help",
-        SIMPLE_TEMPLATE,
-        false
-    ));
+    let cmd = get_app().help_template(EXAMPLE1_TMPL_S);
+    utils::assert_output(cmd, "MyApp --help", SIMPLE_TEMPLATE, false);
 }
 
 #[test]
 fn custom_template() {
-    let app = get_app().help_template(EXAMPLE1_TMPS_F);
-    assert!(utils::compare_output(
-        app,
-        "MyApp --help",
-        CUSTOM_TEMPL_HELP,
-        false
-    ));
+    let cmd = get_app().help_template(EXAMPLE1_TMPS_F);
+    utils::assert_output(cmd, "MyApp --help", CUSTOM_TEMPL_HELP, false);
 }
 
 #[test]
 fn template_empty() {
-    let app = App::new("MyApp")
+    let cmd = Command::new("MyApp")
         .version("1.0")
         .author("Kevin K. <kbknapp@gmail.com>")
         .about("Does awesome things")
         .help_template("");
-    assert!(utils::compare_output(app, "MyApp --help", "\n", false));
+    utils::assert_output(cmd, "MyApp --help", "\n", false);
 }
 
 #[test]
 fn template_notag() {
-    let app = App::new("MyApp")
+    let cmd = Command::new("MyApp")
         .version("1.0")
         .author("Kevin K. <kbknapp@gmail.com>")
         .about("Does awesome things")
         .help_template("test no tag test");
-    assert!(utils::compare_output(
-        app,
-        "MyApp --help",
-        "test no tag test\n",
-        false
-    ));
+    utils::assert_output(cmd, "MyApp --help", "test no tag test\n", false);
 }
 
 #[test]
 fn template_unknowntag() {
-    let app = App::new("MyApp")
+    let cmd = Command::new("MyApp")
         .version("1.0")
         .author("Kevin K. <kbknapp@gmail.com>")
         .about("Does awesome things")
         .help_template("test {unknown_tag} test");
-    assert!(utils::compare_output(
-        app,
-        "MyApp --help",
-        "test {unknown_tag} test\n",
-        false
-    ));
+    utils::assert_output(cmd, "MyApp --help", "test {unknown_tag} test\n", false);
 }
 
 #[test]
 fn template_author_version() {
-    let app = App::new("MyApp")
+    #[cfg(not(feature = "unstable-v5"))]
+    let cmd = Command::new("MyApp")
         .version("1.0")
         .author("Kevin K. <kbknapp@gmail.com>")
         .about("Does awesome things")
         .help_template("{author}\n{version}\n{about}\n{bin}");
-    assert!(utils::compare_output(
-        app,
+
+    #[cfg(feature = "unstable-v5")]
+    let cmd = Command::new("MyApp")
+        .version("1.0")
+        .author("Kevin K. <kbknapp@gmail.com>")
+        .about("Does awesome things")
+        .help_template("{author}\n{version}\n{about}\n{name}");
+
+    utils::assert_output(
+        cmd,
         "MyApp --help",
         "Kevin K. <kbknapp@gmail.com>\n1.0\nDoes awesome things\nMyApp\n",
-        false
-    ));
+        false,
+    );
 }
 
 // ----------
 
-fn get_app() -> App<'static> {
-    App::new("MyApp")
+fn get_app() -> Command {
+    Command::new("MyApp")
         .version("1.0")
         .author("Kevin K. <kbknapp@gmail.com>")
         .about("Does awesome things")
@@ -162,7 +172,7 @@ fn get_app() -> App<'static> {
             d: -d ...           "Turn debugging information on"
         ))
         .subcommand(
-            App::new("test")
+            Command::new("test")
                 .about("does testing things")
                 .arg(arg!(-l --list "lists test values")),
         )

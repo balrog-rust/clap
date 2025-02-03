@@ -2,14 +2,14 @@ use clap::{Args, Parser, Subcommand};
 
 #[derive(Parser, PartialEq, Debug)]
 struct Opt {
-    #[clap(subcommand)]
+    #[command(subcommand)]
     sub: Box<Sub>,
 }
 
 #[derive(Subcommand, PartialEq, Debug)]
 enum Sub {
     Flame {
-        #[clap(flatten)]
+        #[command(flatten)]
         arg: Box<Ext>,
     },
 }
@@ -27,15 +27,15 @@ fn boxed_flatten_subcommand() {
                 arg: Box::new(Ext { arg: 1 })
             })
         },
-        Opt::try_parse_from(&["test", "flame", "1"]).unwrap()
+        Opt::try_parse_from(["test", "flame", "1"]).unwrap()
     );
 }
 
 #[test]
 fn update_boxed_flatten_subcommand() {
-    let mut opt = Opt::try_parse_from(&["test", "flame", "1"]).unwrap();
+    let mut opt = Opt::try_parse_from(["test", "flame", "1"]).unwrap();
 
-    opt.update_from(&["test", "flame", "42"]);
+    opt.try_update_from(["test", "flame", "42"]).unwrap();
 
     assert_eq!(
         Opt {

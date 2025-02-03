@@ -1,44 +1,31 @@
 #![allow(unused_imports, dead_code)]
 
-use std::io::{Cursor, Write};
+use std::io::{BufRead, Cursor, Write};
 use std::str;
 
-use regex::Regex;
+use clap::{arg, error::Error, error::ErrorKind, Arg, ArgAction, ArgGroup, Command};
+use snapbox::assert_data_eq;
 
-use clap::{arg, App, Arg, ArgGroup};
+pub(crate) const FULL_TEMPLATE: &str = "\
+{before-help}{name} {version}
+{author-with-newline}{about-with-newline}
+{usage-heading} {usage}
 
-pub fn compare<S, S2>(l: S, r: S2) -> bool
-where
-    S: AsRef<str>,
-    S2: AsRef<str>,
-{
-    let re = Regex::new("\x1b[^m]*m").unwrap();
-    // Strip out any mismatching \r character on windows that might sneak in on either side
-    let ls = l.as_ref().replace('\r', "");
-    let rs = r.as_ref().replace('\r', "");
-    let left_ = re.replace_all(&*ls, "");
-    let right = re.replace_all(&*rs, "");
-    let b = left_ == right;
-    if !b {
-        dbg!(&left_);
-        dbg!(&right);
-        println!();
-        println!("--> left");
-        println!("{}", left_);
-        println!("--> right");
-        println!("{}", right);
-        println!("--")
-    }
-    b
-}
+{all-args}{after-help}";
 
-pub fn compare_output(l: App, args: &str, right: &str, stderr: bool) -> bool {
+#[track_caller]
+pub(crate) fn assert_output(
+    l: Command,
+    args: &str,
+    expected: impl snapbox::data::IntoData,
+    stderr: bool,
+) {
     let mut buf = Cursor::new(Vec::with_capacity(50));
     let res = l.try_get_matches_from(args.split(' ').collect::<Vec<_>>());
     let err = res.unwrap_err();
-    write!(&mut buf, "{}", err).unwrap();
-    let content = buf.into_inner();
-    let left = String::from_utf8(content).unwrap();
+    write!(&mut buf, "{err}").unwrap();
+    let actual = buf.into_inner();
+    let actual = String::from_utf8(actual).unwrap();
     assert_eq!(
         stderr,
         err.use_stderr(),
@@ -46,66 +33,84 @@ pub fn compare_output(l: App, args: &str, right: &str, stderr: bool) -> bool {
         stderr,
         err.use_stderr()
     );
-    compare(left, right)
+    assert_data_eq!(actual, expected.raw());
+}
+
+#[track_caller]
+pub(crate) fn assert_error<F: clap::error::ErrorFormatter>(
+    err: Error<F>,
+    expected_kind: ErrorKind,
+    expected_output: impl snapbox::data::IntoData,
+    stderr: bool,
+) {
+    let actual_output = err.to_string();
+    assert_eq!(
+        stderr,
+        err.use_stderr(),
+        "Should Use STDERR failed. Should be {} but is {}",
+        stderr,
+        err.use_stderr()
+    );
+    assert_eq!(expected_kind, err.kind());
+    #[cfg(feature = "error-context")]
+    assert_data_eq!(actual_output, expected_output);
 }
 
 // Legacy tests from the python script days
 
-pub fn complex_app() -> App<'static> {
+pub(crate) fn complex_app() -> Command {
     let opt3_vals = ["fast", "slow"];
     let pos3_vals = ["vi", "emacs"];
 
-    App::new("clap-test")
+    Command::new("clap-test")
         .version("v1.4.8")
         .about("tests clap library")
         .author("Kevin K. <kbknapp@gmail.com>")
+        .help_template(FULL_TEMPLATE)
         .arg(
             arg!(
                 -o --option <opt> "tests options"
             )
             .required(false)
-            .multiple_values(true)
-            .multiple_occurrences(true),
+            .num_args(1..)
+            .action(ArgAction::Append),
         )
         .arg(arg!([positional] "tests positionals"))
-        .arg(arg!(-f --flag ... "tests flags").global(true))
-        .args(&[
+        .arg(
+            arg!(-f --flag  "tests flags")
+                .action(ArgAction::Count)
+                .global(true),
+        )
+        .args([
             arg!(flag2: -F "tests flags with exclusions")
                 .conflicts_with("flag")
-                .requires("long-option-2"),
+                .requires("long-option-2")
+                .action(ArgAction::SetTrue),
             arg!(--"long-option-2" <option2> "tests long options with exclusions")
-                .required(false)
                 .conflicts_with("option")
                 .requires("positional2"),
             arg!([positional2] "tests positionals with exclusions"),
-            arg!(-O --option3 <option3> "specific vals")
-                .required(false)
-                .possible_values(opt3_vals),
-            arg!([positional3] ... "tests specific values").possible_values(pos3_vals),
-            arg!(--multvals "Tests multiple values, not mult occs")
-                .value_names(&["one", "two"])
-                .required(false),
-            arg!(--multvalsmo ... "Tests multiple values, and mult occs")
-                .value_names(&["one", "two"])
-                .required(false),
-            arg!(--minvals2 <minvals> "Tests 2 min vals")
-                .required(false)
-                .min_values(2),
-            arg!(--maxvals3 <maxvals> "Tests 3 max vals")
-                .required(false)
-                .max_values(3),
+            arg!(-O --option3 <option3> "specific vals").value_parser(opt3_vals),
+            arg!([positional3] ... "tests specific values").value_parser(pos3_vals),
+            arg!(--multvals <val> "Tests multiple values, not mult occs")
+                .value_names(["one", "two"]),
+            arg!(--multvalsmo <val> ... "Tests multiple values, and mult occs")
+                .value_names(["one", "two"]),
+            arg!(--minvals2 <minvals> "Tests 2 min vals").num_args(2..),
+            arg!(--maxvals3 <maxvals> "Tests 3 max vals").num_args(1..=3),
+            arg!(--optvaleq <optval> "Tests optional value, require = sign")
+                .num_args(0..=1)
+                .require_equals(true),
+            arg!(--optvalnoeq <optval> "Tests optional value").num_args(0..=1),
         ])
         .subcommand(
-            App::new("subcmd")
+            Command::new("subcmd")
                 .about("tests subcommands")
                 .version("0.1")
                 .author("Kevin K. <kbknapp@gmail.com>")
-                .arg(
-                    arg!(-o --option <scoption> "tests options")
-                        .required(false)
-                        .multiple_values(true),
-                )
-                .arg(arg!(-s --subcmdarg <subcmdarg> "tests other args").required(false))
+                .help_template(FULL_TEMPLATE)
+                .arg(arg!(-o --option <scoption> "tests options").num_args(1..))
+                .arg(arg!(-s --subcmdarg <subcmdarg> "tests other args"))
                 .arg(arg!([scpositional] "tests positionals")),
         )
 }

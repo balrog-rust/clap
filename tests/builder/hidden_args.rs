@@ -1,340 +1,304 @@
-use crate::utils;
+use super::utils;
 
-use clap::{arg, App, AppSettings, Arg};
+use clap::{arg, builder::PossibleValue, Arg, ArgAction, Command};
 
-static HIDDEN_ARGS: &str = "test 1.4
-Kevin K.
+static HIDDEN_ARGS: &str = "\
 tests stuff
 
-USAGE:
-    test [OPTIONS]
+Usage: test [OPTIONS]
 
-OPTIONS:
-    -F, --flag2           some other flag
-    -h, --help            Print help information
-        --option <opt>    some option
-    -V, --version         Print version information
+Options:
+  -F, --flag2         some other flag
+      --option <opt>  some option
+  -h, --help          Print help
+  -V, --version       Print version
 ";
 
 #[test]
 fn hide_args() {
-    let app = App::new("test")
+    let cmd = Command::new("test")
         .author("Kevin K.")
         .about("tests stuff")
         .version("1.4")
-        .args(&[
+        .args([
             arg!(-f --flag "some flag").hide(true),
             arg!(-F --flag2 "some other flag"),
-            arg!(--option <opt> "some option").required(false),
+            arg!(--option <opt> "some option"),
             Arg::new("DUMMY").hide(true),
         ]);
-    assert!(utils::compare_output(
-        app,
-        "test --help",
-        HIDDEN_ARGS,
-        false
-    ));
+    utils::assert_output(cmd, "test --help", HIDDEN_ARGS, false);
 }
 
-static HIDDEN_SHORT_ARGS: &str = "test 2.31.2
-Steve P.
+static HIDDEN_SHORT_ARGS: &str = "\
 hides short args
 
-USAGE:
-    test [OPTIONS]
+Usage: test [OPTIONS]
 
-OPTIONS:
-    -h, --help       Print help information
-    -v, --visible    This text should be visible
-    -V, --version    Print version information
-";
-
-static HIDDEN_SHORT_ARGS_LONG_HELP: &str = "test 2.31.2
-Steve P.
-hides short args
-
-USAGE:
-    test [OPTIONS]
-
-OPTIONS:
-    -c, --config
-            Some help text describing the --config arg
-
-    -h, --help
-            Print help information
-
-    -v, --visible
-            This text should be visible
-
-    -V, --version
-            Print version information
+Options:
+  -v, --visible  This text should be visible
+  -h, --help     Print help (see more with '--help')
+  -V, --version  Print version
 ";
 
 /// Ensure hide with short option
 #[test]
 fn hide_short_args() {
-    let app = App::new("test")
+    let cmd = Command::new("test")
         .about("hides short args")
         .author("Steve P.")
         .version("2.31.2")
-        .args(&[
+        .args([
             Arg::new("cfg")
                 .short('c')
                 .long("config")
                 .hide_short_help(true)
+                .action(ArgAction::SetTrue)
                 .help("Some help text describing the --config arg"),
             Arg::new("visible")
                 .short('v')
                 .long("visible")
+                .action(ArgAction::SetTrue)
                 .help("This text should be visible"),
         ]);
 
-    assert!(utils::compare_output(
-        app,
-        "test -h",
-        HIDDEN_SHORT_ARGS,
-        false
-    ));
+    utils::assert_output(cmd, "test -h", HIDDEN_SHORT_ARGS, false);
 }
 
 /// Ensure visible with opposite option
 #[test]
 fn hide_short_args_long_help() {
-    let app = App::new("test")
+    static HIDDEN_SHORT_ARGS_LONG_HELP: &str = "\
+hides short args
+
+Usage: test [OPTIONS]
+
+Options:
+  -c, --config
+          Some help text describing the --config arg
+
+  -v, --visible
+          This text should be visible
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
+";
+
+    let cmd = Command::new("test")
         .about("hides short args")
         .author("Steve P.")
         .version("2.31.2")
-        .args(&[
+        .args([
             Arg::new("cfg")
                 .short('c')
                 .long("config")
                 .hide_short_help(true)
+                .action(ArgAction::SetTrue)
                 .help("Some help text describing the --config arg"),
             Arg::new("visible")
                 .short('v')
                 .long("visible")
+                .action(ArgAction::SetTrue)
                 .help("This text should be visible"),
         ]);
 
-    assert!(utils::compare_output(
-        app,
-        "test --help",
-        HIDDEN_SHORT_ARGS_LONG_HELP,
-        false
-    ));
+    utils::assert_output(cmd, "test --help", HIDDEN_SHORT_ARGS_LONG_HELP, false);
 }
 
-static HIDDEN_LONG_ARGS: &str = "test 2.31.2
-Steve P.
+static HIDDEN_LONG_ARGS: &str = "\
 hides long args
 
-USAGE:
-    test [OPTIONS]
+Usage: test [OPTIONS]
 
-OPTIONS:
-    -h, --help
-            Print help information
+Options:
+  -v, --visible
+          This text should be visible
 
-    -v, --visible
-            This text should be visible
+  -h, --help
+          Print help (see a summary with '-h')
 
-    -V, --version
-            Print version information
+  -V, --version
+          Print version
 ";
 
 #[test]
 fn hide_long_args() {
-    let app = App::new("test")
+    let cmd = Command::new("test")
         .about("hides long args")
         .author("Steve P.")
         .version("2.31.2")
-        .args(&[
+        .args([
             Arg::new("cfg")
                 .short('c')
                 .long("config")
                 .hide_long_help(true)
+                .action(ArgAction::SetTrue)
                 .help("Some help text describing the --config arg"),
             Arg::new("visible")
                 .short('v')
                 .long("visible")
+                .action(ArgAction::SetTrue)
                 .help("This text should be visible"),
         ]);
 
-    assert!(utils::compare_output(
-        app,
-        "test --help",
-        HIDDEN_LONG_ARGS,
-        false
-    ));
+    utils::assert_output(cmd, "test --help", HIDDEN_LONG_ARGS, false);
 }
 
-static HIDDEN_LONG_ARGS_SHORT_HELP: &str = "test 2.31.2
-Steve P.
+static HIDDEN_LONG_ARGS_SHORT_HELP: &str = "\
 hides long args
 
-USAGE:
-    test [OPTIONS]
+Usage: test [OPTIONS]
 
-OPTIONS:
-    -c, --config     Some help text describing the --config arg
-    -h, --help       Print help information
-    -v, --visible    This text should be visible
-    -V, --version    Print version information
+Options:
+  -c, --config   Some help text describing the --config arg
+  -v, --visible  This text should be visible
+  -h, --help     Print help (see more with '--help')
+  -V, --version  Print version
 ";
 
 #[test]
 fn hide_long_args_short_help() {
-    let app = App::new("test")
+    let cmd = Command::new("test")
         .about("hides long args")
         .author("Steve P.")
         .version("2.31.2")
-        .args(&[
+        .args([
             Arg::new("cfg")
                 .short('c')
                 .long("config")
                 .hide_long_help(true)
+                .action(ArgAction::SetTrue)
                 .help("Some help text describing the --config arg"),
             Arg::new("visible")
                 .short('v')
                 .long("visible")
+                .action(ArgAction::SetTrue)
                 .help("This text should be visible"),
         ]);
 
-    assert!(utils::compare_output(
-        app,
-        "test -h",
-        HIDDEN_LONG_ARGS_SHORT_HELP,
-        false
-    ));
+    utils::assert_output(cmd, "test -h", HIDDEN_LONG_ARGS_SHORT_HELP, false);
 }
 
-static HIDDEN_POS_ARGS: &str = "test 1.4
+static HIDDEN_POS_ARGS: &str = "\
+Usage: test [another]
 
-USAGE:
-    test [another]
+Arguments:
+  [another]  another pos
 
-ARGS:
-    <another>    another pos
-
-OPTIONS:
-    -h, --help       Print help information
-    -V, --version    Print version information
+Options:
+  -h, --help     Print help
+  -V, --version  Print version
 ";
 
 #[test]
 fn hide_pos_args() {
-    let app = App::new("test").version("1.4").args(&[
+    let cmd = Command::new("test").version("1.4").args([
         Arg::new("pos").help("some pos").hide(true),
         Arg::new("another").help("another pos"),
     ]);
 
-    assert!(utils::compare_output(
-        app,
-        "test --help",
-        HIDDEN_POS_ARGS,
-        false
-    ));
+    utils::assert_output(cmd, "test --help", HIDDEN_POS_ARGS, false);
 }
 
-static HIDDEN_SUBCMDS: &str = "test 1.4
+static HIDDEN_SUBCMDS: &str = "\
+Usage: test
 
-USAGE:
-    test
-
-OPTIONS:
-    -h, --help       Print help information
-    -V, --version    Print version information
+Options:
+  -h, --help     Print help
+  -V, --version  Print version
 ";
 
 #[test]
 fn hide_subcmds() {
-    let app = App::new("test")
+    let cmd = Command::new("test")
         .version("1.4")
-        .subcommand(App::new("sub").setting(AppSettings::Hidden));
+        .subcommand(Command::new("sub").hide(true));
 
-    assert!(utils::compare_output(
-        app,
-        "test --help",
-        HIDDEN_SUBCMDS,
-        false
-    ));
+    utils::assert_output(cmd, "test --help", HIDDEN_SUBCMDS, false);
 }
 
-static HIDDEN_OPT_ARGS_ONLY: &str = "test 1.4
-
-USAGE:
-    test
+static HIDDEN_OPT_ARGS_ONLY: &str = "\
+Usage: test
 
 After help
 ";
 
 #[test]
 fn hide_opt_args_only() {
-    let app = App::new("test")
+    let cmd = Command::new("test")
         .version("1.4")
         .after_help("After help")
-        .mut_arg("help", |a| a.hide(true))
-        .mut_arg("version", |a| a.hide(true))
-        .arg(
-            arg!(--option <opt> "some option")
-                .required(false)
-                .hide(true),
-        );
+        .disable_help_flag(true)
+        .disable_version_flag(true)
+        .arg(arg!(-h - -help).action(ArgAction::Help).hide(true))
+        .arg(arg!(-v - -version).hide(true))
+        .arg(arg!(--option <opt> "some option").hide(true));
 
-    assert!(utils::compare_output(
-        app,
-        "test --help",
-        HIDDEN_OPT_ARGS_ONLY,
-        false
-    ));
+    utils::assert_output(cmd, "test --help", HIDDEN_OPT_ARGS_ONLY, false);
 }
 
-static HIDDEN_POS_ARGS_ONLY: &str = "test 1.4
-
-USAGE:
-    test
+static HIDDEN_POS_ARGS_ONLY: &str = "\
+Usage: test
 
 After help
 ";
 
 #[test]
 fn hide_pos_args_only() {
-    let app = App::new("test")
+    let cmd = Command::new("test")
         .version("1.4")
         .after_help("After help")
-        .mut_arg("help", |a| a.hide(true))
-        .mut_arg("version", |a| a.hide(true))
-        .args(&[Arg::new("pos").help("some pos").hide(true)]);
+        .disable_help_flag(true)
+        .disable_version_flag(true)
+        .arg(arg!(-h - -help).action(ArgAction::Help).hide(true))
+        .arg(arg!(-v - -version).hide(true))
+        .args([Arg::new("pos").help("some pos").hide(true)]);
 
-    assert!(utils::compare_output(
-        app,
-        "test --help",
-        HIDDEN_POS_ARGS_ONLY,
-        false
-    ));
+    utils::assert_output(cmd, "test --help", HIDDEN_POS_ARGS_ONLY, false);
 }
 
-static HIDDEN_SUBCMDS_ONLY: &str = "test 1.4
-
-USAGE:
-    test
+static HIDDEN_SUBCMDS_ONLY: &str = "\
+Usage: test
 
 After help
 ";
 
 #[test]
 fn hide_subcmds_only() {
-    let app = App::new("test")
+    let cmd = Command::new("test")
         .version("1.4")
         .after_help("After help")
-        .mut_arg("help", |a| a.hide(true))
-        .mut_arg("version", |a| a.hide(true))
-        .subcommand(App::new("sub").setting(AppSettings::Hidden));
+        .disable_help_flag(true)
+        .disable_version_flag(true)
+        .arg(arg!(-h - -help).action(ArgAction::Help).hide(true))
+        .arg(arg!(-v - -version).hide(true))
+        .subcommand(Command::new("sub").hide(true));
 
-    assert!(utils::compare_output(
-        app,
-        "test --help",
-        HIDDEN_SUBCMDS_ONLY,
-        false
-    ));
+    utils::assert_output(cmd, "test --help", HIDDEN_SUBCMDS_ONLY, false);
+}
+
+#[test]
+fn hidden_arg_with_possible_value_with_help() {
+    // Normally the presence of a possible value with a help text triggers a
+    // change of the --help help text by appending `(see more with '--help')`
+    // or `(see a summary with '-h')`. When the argument is completely hidden
+    // we however do not want it to trigger that change.
+    static POS_VALS_HELP: &str = "\
+Usage: ctest
+
+Options:
+  -h, --help  Print help
+";
+    let app = Command::new("ctest").arg(
+        Arg::new("pos")
+            .hide(true)
+            .value_parser([
+                PossibleValue::new("fast"),
+                PossibleValue::new("slow").help("not as fast"),
+            ])
+            .action(ArgAction::Set),
+    );
+    utils::assert_output(app, "ctest --help", POS_VALS_HELP, false);
 }

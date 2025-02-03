@@ -4,7 +4,7 @@ use clap::Parser;
 fn raw_idents() {
     #[derive(Parser, Debug, PartialEq)]
     struct Opt {
-        #[clap(short, long)]
+        #[arg(short, long)]
         r#type: String,
     }
 
@@ -12,13 +12,13 @@ fn raw_idents() {
         Opt {
             r#type: "long".into()
         },
-        Opt::try_parse_from(&["test", "--type", "long"]).unwrap()
+        Opt::try_parse_from(["test", "--type", "long"]).unwrap()
     );
 
     assert_eq!(
         Opt {
             r#type: "short".into()
         },
-        Opt::try_parse_from(&["test", "-t", "short"]).unwrap()
+        Opt::try_parse_from(["test", "-t", "short"]).unwrap()
     );
 }

@@ -1,6 +1,7 @@
 #![cfg(not(windows))]
 
-use clap::{ErrorKind, Parser};
+use clap::error::ErrorKind;
+use clap::Parser;
 use std::ffi::OsString;
 use std::os::unix::ffi::OsStringExt;
 
@@ -11,7 +12,7 @@ struct Positional {
 
 #[derive(Parser, Debug, PartialEq, Eq)]
 struct Named {
-    #[clap(short, long)]
+    #[arg(short, long)]
     arg: String,
 }
 
@@ -19,7 +20,7 @@ struct Named {
 fn invalid_utf8_strict_positional() {
     let m = Positional::try_parse_from(vec![OsString::from(""), OsString::from_vec(vec![0xe9])]);
     assert!(m.is_err());
-    assert_eq!(m.unwrap_err().kind, ErrorKind::InvalidUtf8);
+    assert_eq!(m.unwrap_err().kind(), ErrorKind::InvalidUtf8);
 }
 
 #[test]
@@ -30,7 +31,7 @@ fn invalid_utf8_strict_option_short_space() {
         OsString::from_vec(vec![0xe9]),
     ]);
     assert!(m.is_err());
-    assert_eq!(m.unwrap_err().kind, ErrorKind::InvalidUtf8);
+    assert_eq!(m.unwrap_err().kind(), ErrorKind::InvalidUtf8);
 }
 
 #[test]
@@ -40,7 +41,7 @@ fn invalid_utf8_strict_option_short_equals() {
         OsString::from_vec(vec![0x2d, 0x61, 0x3d, 0xe9]),
     ]);
     assert!(m.is_err());
-    assert_eq!(m.unwrap_err().kind, ErrorKind::InvalidUtf8);
+    assert_eq!(m.unwrap_err().kind(), ErrorKind::InvalidUtf8);
 }
 
 #[test]
@@ -50,7 +51,7 @@ fn invalid_utf8_strict_option_short_no_space() {
         OsString::from_vec(vec![0x2d, 0x61, 0xe9]),
     ]);
     assert!(m.is_err());
-    assert_eq!(m.unwrap_err().kind, ErrorKind::InvalidUtf8);
+    assert_eq!(m.unwrap_err().kind(), ErrorKind::InvalidUtf8);
 }
 
 #[test]
@@ -61,7 +62,7 @@ fn invalid_utf8_strict_option_long_space() {
         OsString::from_vec(vec![0xe9]),
     ]);
     assert!(m.is_err());
-    assert_eq!(m.unwrap_err().kind, ErrorKind::InvalidUtf8);
+    assert_eq!(m.unwrap_err().kind(), ErrorKind::InvalidUtf8);
 }
 
 #[test]
@@ -71,18 +72,17 @@ fn invalid_utf8_strict_option_long_equals() {
         OsString::from_vec(vec![0x2d, 0x2d, 0x61, 0x72, 0x67, 0x3d, 0xe9]),
     ]);
     assert!(m.is_err());
-    assert_eq!(m.unwrap_err().kind, ErrorKind::InvalidUtf8);
+    assert_eq!(m.unwrap_err().kind(), ErrorKind::InvalidUtf8);
 }
 
 #[derive(Parser, Debug, PartialEq, Eq)]
 struct PositionalOs {
-    #[clap(parse(from_os_str))]
     arg: OsString,
 }
 
 #[derive(Parser, Debug, PartialEq, Eq)]
 struct NamedOs {
-    #[clap(short, long, parse(from_os_str))]
+    #[arg(short, long)]
     arg: OsString,
 }
 
@@ -171,7 +171,7 @@ fn invalid_utf8_option_long_equals() {
 
 #[derive(Debug, PartialEq, Parser)]
 enum External {
-    #[clap(external_subcommand)]
+    #[command(external_subcommand)]
     Other(Vec<String>),
 }
 
@@ -183,7 +183,7 @@ fn refuse_invalid_utf8_subcommand_with_allow_external_subcommands() {
         OsString::from("normal"),
     ]);
     assert!(m.is_err());
-    assert_eq!(m.unwrap_err().kind, ErrorKind::InvalidUtf8);
+    assert_eq!(m.unwrap_err().kind(), ErrorKind::InvalidUtf8);
 }
 
 #[test]
@@ -196,12 +196,12 @@ fn refuse_invalid_utf8_subcommand_args_with_allow_external_subcommands() {
         OsString::from("--another_normal"),
     ]);
     assert!(m.is_err());
-    assert_eq!(m.unwrap_err().kind, ErrorKind::InvalidUtf8);
+    assert_eq!(m.unwrap_err().kind(), ErrorKind::InvalidUtf8);
 }
 
 #[derive(Debug, PartialEq, Parser)]
 enum ExternalOs {
-    #[clap(external_subcommand)]
+    #[command(external_subcommand)]
     Other(Vec<OsString>),
 }
 
