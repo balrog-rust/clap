@@ -10,10 +10,10 @@ use clap::Parser;
 
 #[derive(Parser, Debug)]
 struct MakeCookie {
-    #[clap(short)]
+    #[arg(short)]
     s: String,
 
-    #[clap(subcommand, flatten)]
+    #[command(subcommand, flatten)]
     cmd: Command,
 }
 
@@ -23,12 +23,12 @@ enum Command {
     Pound { acorns: u32 },
 
     Sparkle {
-        #[clap(short)]
+        #[arg(short)]
         color: String,
     },
 }
 
 fn main() {
     let opt = MakeCookie::parse();
-    println!("{:?}", opt);
+    println!("{opt:?}");
 }

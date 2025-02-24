@@ -2,8 +2,6 @@
 
 Contributions are always welcome! And there is a multitude of ways in which you can help depending on what you like to do, or are good at. Anything from documentation, code cleanup, issue completion, new features, you name it, even filing issues is contributing and greatly appreciated!
 
-Another really great way to help is if you find an interesting, or helpful way in which to use `clap`. You can either add it to the [examples/](examples) directory, or file an issue and tell me. I'm all about giving credit where credit is due :)
-
 ## Goals
 
 There are a few goals of `clap` that I'd like to maintain throughout contributions. If your proposed changes break, or go against any of these goals we'll discuss the changes further before merging (but will *not* be ignored, all contributes are welcome!). These are by no means hard-and-fast rules, as I'm no expert and break them myself from time to time (even if by mistake or ignorance :P).
@@ -22,54 +20,121 @@ There are a few goals of `clap` that I'd like to maintain throughout contributio
 
 ## General Overview
 
-### Testing Code
+### Where to Start
 
-To test with all features both enabled and disabled, you can run this command:
+- [Discussions](https://github.com/clap-rs/clap/discussions) can be useful for getting help and brainstorming
+- [Issues](https://github.com/clap-rs/clap/issues) work well discussing a need and how to solve it
+  - Focus: requirements gathering and design discussions
+  - Sometimes a branch or Draft PR might be used to demonstrate an idea
+- [PRs](https://github.com/clap-rs/clap/pulls) work well for when the solution has already been discussed as an Issue or there is little to no discussion (obvious bug or documentation fixes)
+  - Focus: implementation discussions
 
-```sh
-$ cargo test --features "wrap_help yaml regex unstable-replace"
+### Compatibility Expectations
+
+Our releases fall into one of:
+- Major releases which are reserved for breaking changes
+  - Aspire to at least 6-9 months between releases
+  - Remove all deprecated functionality
+  - Changes in help/error output that could cause glaring inconsistencies in end-user applications
+  - Try to minimize new breaking changes to ease user transition and reduce time "we go dark" (unreleased feature-branch)
+  - Upon release, a minor release will be made for the previous major that enables `deprecated` feature by default
+- Minor releases which are for minor compatibility changes
+  - Aspire to at least 2 months between releases
+  - Changes to MSRV
+  - Wide-spread help/error output changes that would cause minor inconsistencies in end-user applications
+  - Deprecating existing functionality (behind the `deprecated` feature flag)
+  - Making the `deprecated` feature flag enabled-by-default (only on last planned minor release)
+  - `#[doc(hidden)]` all deprecated items in the prior minor release
+- Patch releases
+  - One for every user-facing, user-contributed PR (i.e. release early, release often)
+  - Changes in help/error output that are one-off or improving consistency so as to not increase inconsistency with end-user applications
+
+If your change does not fit within a "patch" release, please coordinate with the clap maintainers for how to handle the situation.
+
+Some practices to avoid breaking changes
+- Duplicate functionality, with old functionality marked as "deprecated"
+  - Common documentation pattern: `/// Deprecated in [Issue #XXX](https://github.com/clap-rs/clap/issues/XXX), replaced with [intra-doc-link]`
+  - Common deprecation pattern: `#[cfg_attr(feature = "deprecated", deprecated(since = "X.Y.Z", note = "Replaced with `ITEM` in Issue #XXX"))]`
+    - `deprecated` feature flag is to allow people to process them on their
+      time table and allow us to process feedback from early adopters before
+      requiring everyone to process them on the next major version.
+  - Please keep API addition and deprecation in separate commits in a PR to make it easier to review
+- Develop the feature behind an `unstable-<name>` feature flag with a stabilization tracking issue (e.g. [Multicall Tracking issue](https://github.com/clap-rs/clap/issues/2861))
+
+### Version Support Policy
+
+As we work towards [a more flexible architecture](https://github.com/clap-rs/clap/discussions/3476), we hope to support multiple major versions to help ease users through the upgrade churn.
+
+| Version                                              | Status        | Support | End-of-Life |
+|------------------------------------------------------|---------------|---------|-------------|
+| [v4](https://github.com/clap-rs/clap/tree/master)    | active        | Features and bug fixes target `master` by default | TBD |
+| [v3](https://github.com/clap-rs/clap/tree/v3-master) | maintenance   | Accepting trivial cherry-picks from `master` (i.e. minimal conflict resolution) by contributors and fixes for ecosystem-wide showstoppers | TBD |
+| [v2](https://github.com/clap-rs/clap/tree/v2-master) | deprecated    | Only accepting fixes for ecosystem-wide showstoppers | TBD |
+| v1                                                   | unsupported   | \- | \- |
+
+Note: We have not yet determined the End-of-Life schedule for previous major versions.  We will give at least a 2 month warning before changing the support status.
+
+### Verifying Changes
+
+A common (sub)set of commands for verifying your change:
+```console
+$ make test-full
+$ make clippy-full
+$ make doc
 ```
+*(If `make` is not available on your system, you can look up what these expand to in the [Makefile](./Makefile))*
 
-Sometimes it's helpful to only run a subset of the tests, which can be done via:
+Check out the [Makefile](./Makefile) for more commands run by CI.
 
-```sh
-$ cargo test --test <test_name>
-```
+### Debugging Clap
 
-### Linting Code
+A helpful technique is to see the `clap` debug output while developing features. In order to see the debug output while running the full test suite or individual tests, run:
 
-During the CI process `clap` runs against many different lints using [`clippy`](https://github.com/rust-lang/rust-clippy).
-
-In order to check the code for lints and to format it run:
-
-```sh
-$ cargo clippy --features "wrap_help yaml regex unstable-replace" -- -D warnings
-$ cargo fmt -- --check
-```
-
-### Debugging Code
-
-Another helpful technique is to see the `clap` debug output while developing features. In order to see the debug output while running the full test suite or individual tests, run:
-
-```sh
+```console
 $ cargo test --features debug
 
 # Or for individual tests
 $ cargo test --test <test_name> --features debug
 ```
 
-### Tests and Documentation
-
-1. Create tests for your changes
-2. **Ensure the tests are passing.** Run the tests as specified above.
-3. **Ensure linting is passing** Run the lints as specified above.
-4. Ensure your changes contain documentation if adding new APIs or features.
-
 ### Preparing the PR
 
-1. `git rebase` into concise commits and remove `--fixup`s or `wip` commits (`git rebase -i HEAD~NUM` where `NUM` is number of commits back to start the rebase)
-2. Push your changes back to your fork (`git push origin $your-branch`)
-3. Create a pull request against `master`! (You can also create the pull request first, and we'll merge when ready. This a good way to discuss proposed changes.)
+As a heads up, we'll be running your PR through the following gauntlet:
+- warnings turned to compile errors
+- `cargo test`
+- `rustfmt`
+- `clippy`
+- `rustdoc`
+- [`committed`](https://github.com/crate-ci/committed) as we use [Conventional](https://www.conventionalcommits.org) commit style
+- [`typos`](https://github.com/crate-ci/typos) to check spelling
+
+Not everything can be checked automatically though.
+
+We request that the commit history gets cleaned up.
+We ask that commits are atomic, meaning they are complete and have a single responsibility.
+PRs should tell a cohesive story, with test and refactor commits that keep the
+fix or feature commits simple and clear.
+
+Specifically, we would encourage
+- File renames be isolated into their own commit
+- Add tests in a commit before their feature or fix, showing the current behavior.
+  The diff for the feature/fix commit will then show how the behavior changed,
+  making it clearer to reviewers and the community and showing people that the
+  test is verifying the expected state.
+  - e.g. [clap#5520](https://github.com/clap-rs/clap/pull/5520)
+
+Note that we are talking about ideals.
+We understand having a clean history requires more advanced git skills;
+feel free to ask us for help!
+We might even suggest where it would work to be lax.
+We also understand that editing some early commits may cause a lot of churn
+with merge conflicts which can make it not worth editing all of the history.
+
+For code organization, we recommend
+- Grouping `impl` blocks next to their type (or trait)
+- Grouping private items after the `pub` item that uses them.
+  - The intent is to help people quickly find the "relevant" details, allowing them to "dig deeper" as needed.  Or put another way, the `pub` items serve as a table-of-contents.
+  - The exact order is fuzzy; do what makes sense
 
 ## Conditions for fulfilling a bounty:
 

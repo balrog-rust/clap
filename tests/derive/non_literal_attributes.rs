@@ -12,31 +12,32 @@
 // commit#ea76fa1b1b273e65e3b0b1046643715b49bec51f which is licensed under the
 // MIT/Apache 2.0 license.
 
-use clap::{AppSettings, ErrorKind, Parser};
+use clap::error::ErrorKind;
+use clap::Parser;
 use std::num::ParseIntError;
 
-pub const DISPLAY_ORDER: usize = 2;
+pub(crate) const DISPLAY_ORDER: usize = 2;
 
 // Check if the global settings compile
 #[derive(Parser, Debug, PartialEq, Eq)]
-#[clap(global_setting = AppSettings::AllowHyphenValues)]
+#[command(group = clap::ArgGroup::new("foo"))]
 struct Opt {
-    #[clap(
+    #[arg(
         long = "x",
         display_order = DISPLAY_ORDER,
         next_line_help = true,
         default_value = "0",
-        require_equals = true
+        require_equals = true,
     )]
     x: i32,
 
-    #[clap(short = 'l', long = "level", aliases = &["set-level", "lvl"])]
+    #[arg(short = 'l', long = "level", aliases = ["set-level", "lvl"])]
     level: String,
 
-    #[clap(long("values"))]
+    #[arg(long("values"))]
     values: Vec<i32>,
 
-    #[clap(name = "FILE", requires_if("FILE", "values"))]
+    #[arg(id = "FILE", requires_if("FILE", "values"))]
     files: Vec<String>,
 }
 
@@ -49,7 +50,7 @@ fn test_slice() {
             files: Vec::new(),
             values: vec![],
         },
-        Opt::try_parse_from(&["test", "-l", "1"]).unwrap()
+        Opt::try_parse_from(["test", "-l", "1"]).unwrap()
     );
     assert_eq!(
         Opt {
@@ -58,7 +59,7 @@ fn test_slice() {
             files: Vec::new(),
             values: vec![],
         },
-        Opt::try_parse_from(&["test", "--level", "1"]).unwrap()
+        Opt::try_parse_from(["test", "--level", "1"]).unwrap()
     );
     assert_eq!(
         Opt {
@@ -67,7 +68,7 @@ fn test_slice() {
             files: Vec::new(),
             values: vec![],
         },
-        Opt::try_parse_from(&["test", "--set-level", "1"]).unwrap()
+        Opt::try_parse_from(["test", "--set-level", "1"]).unwrap()
     );
     assert_eq!(
         Opt {
@@ -76,7 +77,7 @@ fn test_slice() {
             files: Vec::new(),
             values: vec![],
         },
-        Opt::try_parse_from(&["test", "--lvl", "1"]).unwrap()
+        Opt::try_parse_from(["test", "--lvl", "1"]).unwrap()
     );
 }
 
@@ -89,7 +90,7 @@ fn test_multi_args() {
             files: vec!["file".to_string()],
             values: vec![],
         },
-        Opt::try_parse_from(&["test", "-l", "1", "file"]).unwrap()
+        Opt::try_parse_from(["test", "-l", "1", "file"]).unwrap()
     );
     assert_eq!(
         Opt {
@@ -98,13 +99,13 @@ fn test_multi_args() {
             files: vec!["FILE".to_string()],
             values: vec![1],
         },
-        Opt::try_parse_from(&["test", "-l", "1", "--values", "1", "--", "FILE"]).unwrap()
+        Opt::try_parse_from(["test", "-l", "1", "--values", "1", "--", "FILE"]).unwrap()
     );
 }
 
 #[test]
 fn test_multi_args_fail() {
-    let result = Opt::try_parse_from(&["test", "-l", "1", "--", "FILE"]);
+    let result = Opt::try_parse_from(["test", "-l", "1", "--", "FILE"]);
     assert!(result.is_err());
 }
 
@@ -117,40 +118,58 @@ fn test_bool() {
             files: vec![],
             values: vec![],
         },
-        Opt::try_parse_from(&["test", "-l", "1", "--x=1"]).unwrap()
+        Opt::try_parse_from(["test", "-l", "1", "--x=1"]).unwrap()
     );
-    let result = Opt::try_parse_from(&["test", "-l", "1", "--x", "1"]);
+    let result = Opt::try_parse_from(["test", "-l", "1", "--x", "1"]);
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err().kind, ErrorKind::NoEquals);
-}
-
-fn parse_hex(input: &str) -> Result<u64, ParseIntError> {
-    u64::from_str_radix(input, 16)
-}
-
-#[derive(Parser, PartialEq, Debug)]
-struct HexOpt {
-    #[clap(short, parse(try_from_str = parse_hex))]
-    number: u64,
+    assert_eq!(result.unwrap_err().kind(), ErrorKind::NoEquals);
 }
 
 #[test]
+#[cfg(feature = "error-context")]
 fn test_parse_hex_function_path() {
+    #[derive(Parser, PartialEq, Debug)]
+    struct HexOpt {
+        #[arg(short, value_parser = parse_hex)]
+        number: u64,
+    }
+
+    fn parse_hex(input: &str) -> Result<u64, ParseIntError> {
+        u64::from_str_radix(input, 16)
+    }
+
     assert_eq!(
         HexOpt { number: 5 },
-        HexOpt::try_parse_from(&["test", "-n", "5"]).unwrap()
+        HexOpt::try_parse_from(["test", "-n", "5"]).unwrap()
     );
     assert_eq!(
         HexOpt {
             number: 0x00ab_cdef
         },
-        HexOpt::try_parse_from(&["test", "-n", "abcdef"]).unwrap()
+        HexOpt::try_parse_from(["test", "-n", "abcdef"]).unwrap()
     );
 
-    let err = HexOpt::try_parse_from(&["test", "-n", "gg"]).unwrap_err();
+    let err = HexOpt::try_parse_from(["test", "-n", "gg"]).unwrap_err();
     assert!(
         err.to_string().contains("invalid digit found in string"),
         "{}",
         err
+    );
+}
+
+#[test]
+#[cfg(feature = "error-context")]
+fn test_const_name() {
+    #[derive(Parser, PartialEq, Debug)]
+    struct Opt {
+        #[arg(id = NAME, short, long)]
+        number: u64,
+    }
+
+    const NAME: &str = "fun";
+
+    assert_eq!(
+        Opt { number: 5 },
+        Opt::try_parse_from(["test", "-f", "5"]).unwrap()
     );
 }

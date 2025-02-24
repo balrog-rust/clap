@@ -1,8 +1,10 @@
-# clap_derive
+# `clap_derive`
 
 Macro implementation for clap's derives.
 
-See [docs.rs](https://docs.rs/clap).
+[docs.rs](https://docs.rs/clap)
+- [Derive Tutorial](https://docs.rs/clap/latest/clap/_derive/_tutorial/index.html)
+- [Derive Reference](https://docs.rs/clap/latest/clap/_derive/index.html)
 
 ## License
 

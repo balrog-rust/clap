@@ -16,22 +16,23 @@ use crate::utils;
 
 use clap::{Args, Parser, Subcommand};
 
-#[derive(Parser, PartialEq, Debug)]
+#[derive(Parser, PartialEq, Eq, Debug)]
 enum Opt {
     /// Fetch stuff from GitHub
     Fetch {
-        #[clap(long)]
+        #[arg(long)]
         all: bool,
-        #[clap(short, long)]
         /// Overwrite local branches.
+        #[arg(short, long)]
         force: bool,
+
         repo: String,
     },
 
     Add {
-        #[clap(short, long)]
+        #[arg(short, long)]
         interactive: bool,
-        #[clap(short, long)]
+        #[arg(short, long)]
         verbose: bool,
     },
 }
@@ -44,7 +45,7 @@ fn test_fetch() {
             force: false,
             repo: "origin".to_string()
         },
-        Opt::try_parse_from(&["test", "fetch", "--all", "origin"]).unwrap()
+        Opt::try_parse_from(["test", "fetch", "--all", "origin"]).unwrap()
     );
     assert_eq!(
         Opt::Fetch {
@@ -52,7 +53,7 @@ fn test_fetch() {
             force: true,
             repo: "origin".to_string()
         },
-        Opt::try_parse_from(&["test", "fetch", "-f", "origin"]).unwrap()
+        Opt::try_parse_from(["test", "fetch", "-f", "origin"]).unwrap()
     );
 }
 
@@ -63,30 +64,30 @@ fn test_add() {
             interactive: false,
             verbose: false
         },
-        Opt::try_parse_from(&["test", "add"]).unwrap()
+        Opt::try_parse_from(["test", "add"]).unwrap()
     );
     assert_eq!(
         Opt::Add {
             interactive: true,
             verbose: true
         },
-        Opt::try_parse_from(&["test", "add", "-i", "-v"]).unwrap()
+        Opt::try_parse_from(["test", "add", "-i", "-v"]).unwrap()
     );
 }
 
 #[test]
 fn test_no_parse() {
-    let result = Opt::try_parse_from(&["test", "badcmd", "-i", "-v"]);
+    let result = Opt::try_parse_from(["test", "badcmd", "-i", "-v"]);
     assert!(result.is_err());
 
-    let result = Opt::try_parse_from(&["test", "add", "--badoption"]);
+    let result = Opt::try_parse_from(["test", "add", "--badoption"]);
     assert!(result.is_err());
 
-    let result = Opt::try_parse_from(&["test"]);
+    let result = Opt::try_parse_from(["test"]);
     assert!(result.is_err());
 }
 
-#[derive(Parser, PartialEq, Debug)]
+#[derive(Parser, PartialEq, Eq, Debug)]
 enum Opt2 {
     DoSomething { arg: String },
 }
@@ -99,11 +100,11 @@ fn test_hyphenated_subcommands() {
         Opt2::DoSomething {
             arg: "blah".to_string()
         },
-        Opt2::try_parse_from(&["test", "do-something", "blah"]).unwrap()
+        Opt2::try_parse_from(["test", "do-something", "blah"]).unwrap()
     );
 }
 
-#[derive(Parser, PartialEq, Debug)]
+#[derive(Parser, PartialEq, Eq, Debug)]
 enum Opt3 {
     Add,
     Init,
@@ -112,25 +113,25 @@ enum Opt3 {
 
 #[test]
 fn test_null_commands() {
-    assert_eq!(Opt3::Add, Opt3::try_parse_from(&["test", "add"]).unwrap());
-    assert_eq!(Opt3::Init, Opt3::try_parse_from(&["test", "init"]).unwrap());
+    assert_eq!(Opt3::Add, Opt3::try_parse_from(["test", "add"]).unwrap());
+    assert_eq!(Opt3::Init, Opt3::try_parse_from(["test", "init"]).unwrap());
     assert_eq!(
         Opt3::Fetch,
-        Opt3::try_parse_from(&["test", "fetch"]).unwrap()
+        Opt3::try_parse_from(["test", "fetch"]).unwrap()
     );
 }
 
-#[derive(Parser, PartialEq, Debug)]
-#[clap(about = "Not shown")]
+#[derive(Parser, PartialEq, Eq, Debug)]
+#[command(about = "Not shown")]
 struct Add {
     file: String,
 }
 /// Not shown
-#[derive(Parser, PartialEq, Debug)]
+#[derive(Parser, PartialEq, Eq, Debug)]
 struct Fetch {
     remote: String,
 }
-#[derive(Parser, PartialEq, Debug)]
+#[derive(Parser, PartialEq, Eq, Debug)]
 enum Opt4 {
     // Not shown
     /// Add a file
@@ -146,14 +147,14 @@ fn test_tuple_commands() {
         Opt4::Add(Add {
             file: "f".to_string()
         }),
-        Opt4::try_parse_from(&["test", "add", "f"]).unwrap()
+        Opt4::try_parse_from(["test", "add", "f"]).unwrap()
     );
-    assert_eq!(Opt4::Init, Opt4::try_parse_from(&["test", "init"]).unwrap());
+    assert_eq!(Opt4::Init, Opt4::try_parse_from(["test", "init"]).unwrap());
     assert_eq!(
         Opt4::Fetch(Fetch {
             remote: "origin".to_string()
         }),
-        Opt4::try_parse_from(&["test", "fetch", "origin"]).unwrap()
+        Opt4::try_parse_from(["test", "fetch", "origin"]).unwrap()
     );
 
     let output = utils::get_long_help::<Opt4>();
@@ -165,28 +166,28 @@ fn test_tuple_commands() {
 
 #[test]
 fn global_passed_down() {
-    #[derive(Debug, PartialEq, Parser)]
+    #[derive(Debug, PartialEq, Eq, Parser)]
     struct Opt {
-        #[clap(global = true, long)]
+        #[arg(global = true, long)]
         other: bool,
-        #[clap(subcommand)]
+        #[command(subcommand)]
         sub: Subcommands,
     }
 
-    #[derive(Debug, PartialEq, Subcommand)]
+    #[derive(Debug, PartialEq, Eq, Subcommand)]
     enum Subcommands {
         Add,
         Global(GlobalCmd),
     }
 
-    #[derive(Debug, PartialEq, Args)]
+    #[derive(Debug, PartialEq, Eq, Args)]
     struct GlobalCmd {
-        #[clap(from_global)]
+        #[arg(from_global)]
         other: bool,
     }
 
     assert_eq!(
-        Opt::try_parse_from(&["test", "global"]).unwrap(),
+        Opt::try_parse_from(["test", "global"]).unwrap(),
         Opt {
             other: false,
             sub: Subcommands::Global(GlobalCmd { other: false })
@@ -194,7 +195,7 @@ fn global_passed_down() {
     );
 
     assert_eq!(
-        Opt::try_parse_from(&["test", "global", "--other"]).unwrap(),
+        Opt::try_parse_from(["test", "global", "--other"]).unwrap(),
         Opt {
             other: true,
             sub: Subcommands::Global(GlobalCmd { other: true })
@@ -204,38 +205,38 @@ fn global_passed_down() {
 
 #[test]
 fn external_subcommand() {
-    #[derive(Debug, PartialEq, Parser)]
+    #[derive(Debug, PartialEq, Eq, Parser)]
     struct Opt {
-        #[clap(subcommand)]
+        #[command(subcommand)]
         sub: Subcommands,
     }
 
-    #[derive(Debug, PartialEq, Subcommand)]
+    #[derive(Debug, PartialEq, Eq, Subcommand)]
     enum Subcommands {
         Add,
         Remove,
-        #[clap(external_subcommand)]
+        #[command(external_subcommand)]
         Other(Vec<String>),
     }
 
     assert_eq!(
-        Opt::try_parse_from(&["test", "add"]).unwrap(),
+        Opt::try_parse_from(["test", "add"]).unwrap(),
         Opt {
             sub: Subcommands::Add
         }
     );
 
     assert_eq!(
-        Opt::try_parse_from(&["test", "remove"]).unwrap(),
+        Opt::try_parse_from(["test", "remove"]).unwrap(),
         Opt {
             sub: Subcommands::Remove
         }
     );
 
-    assert!(Opt::try_parse_from(&["test"]).is_err());
+    assert!(Opt::try_parse_from(["test"]).is_err());
 
     assert_eq!(
-        Opt::try_parse_from(&["test", "git", "status"]).unwrap(),
+        Opt::try_parse_from(["test", "git", "status"]).unwrap(),
         Opt {
             sub: Subcommands::Other(vec!["git".into(), "status".into()])
         }
@@ -246,237 +247,278 @@ fn external_subcommand() {
 fn external_subcommand_os_string() {
     use std::ffi::OsString;
 
-    #[derive(Debug, PartialEq, Parser)]
+    #[derive(Debug, PartialEq, Eq, Parser)]
     struct Opt {
-        #[clap(subcommand)]
+        #[command(subcommand)]
         sub: Subcommands,
     }
 
-    #[derive(Debug, PartialEq, Subcommand)]
+    #[derive(Debug, PartialEq, Eq, Subcommand)]
     enum Subcommands {
-        #[clap(external_subcommand)]
+        #[command(external_subcommand)]
         Other(Vec<OsString>),
     }
 
     assert_eq!(
-        Opt::try_parse_from(&["test", "git", "status"]).unwrap(),
+        Opt::try_parse_from(["test", "git", "status"]).unwrap(),
         Opt {
             sub: Subcommands::Other(vec!["git".into(), "status".into()])
         }
     );
 
-    assert!(Opt::try_parse_from(&["test"]).is_err());
+    assert!(Opt::try_parse_from(["test"]).is_err());
 }
 
 #[test]
 fn external_subcommand_optional() {
-    #[derive(Debug, PartialEq, Parser)]
+    #[derive(Debug, PartialEq, Eq, Parser)]
     struct Opt {
-        #[clap(subcommand)]
+        #[command(subcommand)]
         sub: Option<Subcommands>,
     }
 
-    #[derive(Debug, PartialEq, Subcommand)]
+    #[derive(Debug, PartialEq, Eq, Subcommand)]
     enum Subcommands {
-        #[clap(external_subcommand)]
+        #[command(external_subcommand)]
         Other(Vec<String>),
     }
 
     assert_eq!(
-        Opt::try_parse_from(&["test", "git", "status"]).unwrap(),
+        Opt::try_parse_from(["test", "git", "status"]).unwrap(),
         Opt {
             sub: Some(Subcommands::Other(vec!["git".into(), "status".into()]))
         }
     );
 
-    assert_eq!(Opt::try_parse_from(&["test"]).unwrap(), Opt { sub: None });
+    assert_eq!(Opt::try_parse_from(["test"]).unwrap(), Opt { sub: None });
 }
 
 #[test]
 fn enum_in_enum_subsubcommand() {
-    #[derive(Parser, Debug, PartialEq)]
-    pub enum Opt {
-        #[clap(subcommand)]
+    #[derive(Parser, Debug, PartialEq, Eq)]
+    pub(crate) enum Opt {
+        #[command(alias = "l")]
+        List,
+        #[command(subcommand, alias = "d")]
         Daemon(DaemonCommand),
     }
 
-    #[derive(Subcommand, Debug, PartialEq)]
-    pub enum DaemonCommand {
+    #[derive(Subcommand, Debug, PartialEq, Eq)]
+    pub(crate) enum DaemonCommand {
         Start,
         Stop,
     }
 
-    let result = Opt::try_parse_from(&["test"]);
+    let result = Opt::try_parse_from(["test"]);
     assert!(result.is_err());
 
-    let result = Opt::try_parse_from(&["test", "daemon"]);
+    let result = Opt::try_parse_from(["test", "list"]).unwrap();
+    assert_eq!(Opt::List, result);
+
+    let result = Opt::try_parse_from(["test", "l"]).unwrap();
+    assert_eq!(Opt::List, result);
+
+    let result = Opt::try_parse_from(["test", "daemon"]);
     assert!(result.is_err());
 
-    let result = Opt::try_parse_from(&["test", "daemon", "start"]).unwrap();
+    let result = Opt::try_parse_from(["test", "daemon", "start"]).unwrap();
+    assert_eq!(Opt::Daemon(DaemonCommand::Start), result);
+
+    let result = Opt::try_parse_from(["test", "d", "start"]).unwrap();
     assert_eq!(Opt::Daemon(DaemonCommand::Start), result);
 }
 
 #[test]
 fn update_subcommands() {
-    #[derive(Parser, PartialEq, Debug)]
+    #[derive(Parser, PartialEq, Eq, Debug)]
     enum Opt {
         Command1(Command1),
         Command2(Command2),
     }
 
-    #[derive(Parser, PartialEq, Debug)]
+    #[derive(Parser, PartialEq, Eq, Debug)]
     struct Command1 {
         arg1: i32,
+
         arg2: i32,
     }
 
-    #[derive(Parser, PartialEq, Debug)]
+    #[derive(Parser, PartialEq, Eq, Debug)]
     struct Command2 {
         arg2: i32,
     }
 
     // Full subcommand update
     let mut opt = Opt::Command1(Command1 { arg1: 12, arg2: 14 });
-    opt.try_update_from(&["test", "command1", "42", "44"])
+    opt.try_update_from(["test", "command1", "42", "44"])
         .unwrap();
     assert_eq!(
-        Opt::try_parse_from(&["test", "command1", "42", "44"]).unwrap(),
+        Opt::try_parse_from(["test", "command1", "42", "44"]).unwrap(),
         opt
     );
 
     // Partial subcommand update
     let mut opt = Opt::Command1(Command1 { arg1: 12, arg2: 14 });
-    opt.try_update_from(&["test", "command1", "42"]).unwrap();
+    opt.try_update_from(["test", "command1", "42"]).unwrap();
     assert_eq!(
-        Opt::try_parse_from(&["test", "command1", "42", "14"]).unwrap(),
+        Opt::try_parse_from(["test", "command1", "42", "14"]).unwrap(),
         opt
     );
 
     // Change subcommand
     let mut opt = Opt::Command1(Command1 { arg1: 12, arg2: 14 });
-    opt.try_update_from(&["test", "command2", "43"]).unwrap();
+    opt.try_update_from(["test", "command2", "43"]).unwrap();
     assert_eq!(
-        Opt::try_parse_from(&["test", "command2", "43"]).unwrap(),
+        Opt::try_parse_from(["test", "command2", "43"]).unwrap(),
         opt
     );
 }
 
 #[test]
-fn update_sub_subcommands() {
-    #[derive(Parser, PartialEq, Debug)]
+fn update_subcommands_explicit_required() {
+    #[derive(Parser, PartialEq, Eq, Debug)]
+    #[command(subcommand_required = true)]
     enum Opt {
-        #[clap(subcommand)]
+        Command1(Command1),
+        Command2(Command2),
+    }
+
+    #[derive(Parser, PartialEq, Eq, Debug)]
+    struct Command1 {
+        arg1: i32,
+
+        arg2: i32,
+    }
+
+    #[derive(Parser, PartialEq, Eq, Debug)]
+    struct Command2 {
+        arg2: i32,
+    }
+
+    // Full subcommand update
+    let mut opt = Opt::Command1(Command1 { arg1: 12, arg2: 14 });
+    opt.try_update_from(["test"]).unwrap();
+    assert_eq!(Opt::Command1(Command1 { arg1: 12, arg2: 14 }), opt);
+}
+
+#[test]
+fn update_sub_subcommands() {
+    #[derive(Parser, PartialEq, Eq, Debug)]
+    enum Opt {
+        #[command(subcommand)]
         Child1(Child1),
-        #[clap(subcommand)]
+        #[command(subcommand)]
         Child2(Child2),
     }
 
-    #[derive(Subcommand, PartialEq, Debug)]
+    #[derive(Subcommand, PartialEq, Eq, Debug)]
     enum Child1 {
         Command1(Command1),
         Command2(Command2),
     }
 
-    #[derive(Subcommand, PartialEq, Debug)]
+    #[derive(Subcommand, PartialEq, Eq, Debug)]
     enum Child2 {
         Command1(Command1),
         Command2(Command2),
     }
 
-    #[derive(Args, PartialEq, Debug)]
+    #[derive(Args, PartialEq, Eq, Debug)]
     struct Command1 {
         arg1: i32,
+
         arg2: i32,
     }
 
-    #[derive(Args, PartialEq, Debug)]
+    #[derive(Args, PartialEq, Eq, Debug)]
     struct Command2 {
         arg2: i32,
     }
 
     // Full subcommand update
     let mut opt = Opt::Child1(Child1::Command1(Command1 { arg1: 12, arg2: 14 }));
-    opt.try_update_from(&["test", "child1", "command1", "42", "44"])
+    opt.try_update_from(["test", "child1", "command1", "42", "44"])
         .unwrap();
     assert_eq!(
-        Opt::try_parse_from(&["test", "child1", "command1", "42", "44"]).unwrap(),
+        Opt::try_parse_from(["test", "child1", "command1", "42", "44"]).unwrap(),
         opt
     );
 
     // Partial subcommand update
     let mut opt = Opt::Child1(Child1::Command1(Command1 { arg1: 12, arg2: 14 }));
-    opt.try_update_from(&["test", "child1", "command1", "42"])
+    opt.try_update_from(["test", "child1", "command1", "42"])
         .unwrap();
     assert_eq!(
-        Opt::try_parse_from(&["test", "child1", "command1", "42", "14"]).unwrap(),
+        Opt::try_parse_from(["test", "child1", "command1", "42", "14"]).unwrap(),
         opt
     );
 
     // Partial subcommand update
     let mut opt = Opt::Child1(Child1::Command1(Command1 { arg1: 12, arg2: 14 }));
-    opt.try_update_from(&["test", "child1", "command2", "43"])
+    opt.try_update_from(["test", "child1", "command2", "43"])
         .unwrap();
     assert_eq!(
-        Opt::try_parse_from(&["test", "child1", "command2", "43"]).unwrap(),
+        Opt::try_parse_from(["test", "child1", "command2", "43"]).unwrap(),
         opt
     );
 
     // Change subcommand
     let mut opt = Opt::Child1(Child1::Command1(Command1 { arg1: 12, arg2: 14 }));
-    opt.try_update_from(&["test", "child2", "command2", "43"])
+    opt.try_update_from(["test", "child2", "command2", "43"])
         .unwrap();
     assert_eq!(
-        Opt::try_parse_from(&["test", "child2", "command2", "43"]).unwrap(),
+        Opt::try_parse_from(["test", "child2", "command2", "43"]).unwrap(),
         opt
     );
 }
 
 #[test]
 fn update_ext_subcommand() {
-    #[derive(Parser, PartialEq, Debug)]
+    #[derive(Parser, PartialEq, Eq, Debug)]
     enum Opt {
         Command1(Command1),
         Command2(Command2),
-        #[clap(external_subcommand)]
+        #[command(external_subcommand)]
         Ext(Vec<String>),
     }
 
-    #[derive(Args, PartialEq, Debug)]
+    #[derive(Args, PartialEq, Eq, Debug)]
     struct Command1 {
         arg1: i32,
+
         arg2: i32,
     }
 
-    #[derive(Args, PartialEq, Debug)]
+    #[derive(Args, PartialEq, Eq, Debug)]
     struct Command2 {
         arg2: i32,
     }
 
     // Full subcommand update
     let mut opt = Opt::Ext(vec!["12".into(), "14".into()]);
-    opt.try_update_from(&["test", "ext", "42", "44"]).unwrap();
+    opt.try_update_from(["test", "ext", "42", "44"]).unwrap();
     assert_eq!(
-        Opt::try_parse_from(&["test", "ext", "42", "44"]).unwrap(),
+        Opt::try_parse_from(["test", "ext", "42", "44"]).unwrap(),
         opt
     );
 
     // No partial subcommand update
     let mut opt = Opt::Ext(vec!["12".into(), "14".into()]);
-    opt.try_update_from(&["test", "ext", "42"]).unwrap();
-    assert_eq!(Opt::try_parse_from(&["test", "ext", "42"]).unwrap(), opt);
+    opt.try_update_from(["test", "ext", "42"]).unwrap();
+    assert_eq!(Opt::try_parse_from(["test", "ext", "42"]).unwrap(), opt);
 
     // Change subcommand
     let mut opt = Opt::Ext(vec!["12".into(), "14".into()]);
-    opt.try_update_from(&["test", "command2", "43"]).unwrap();
+    opt.try_update_from(["test", "command2", "43"]).unwrap();
     assert_eq!(
-        Opt::try_parse_from(&["test", "command2", "43"]).unwrap(),
+        Opt::try_parse_from(["test", "command2", "43"]).unwrap(),
         opt
     );
 
     let mut opt = Opt::Command1(Command1 { arg1: 12, arg2: 14 });
-    opt.try_update_from(&["test", "ext", "42", "44"]).unwrap();
+    opt.try_update_from(["test", "ext", "42", "44"]).unwrap();
     assert_eq!(
-        Opt::try_parse_from(&["test", "ext", "42", "44"]).unwrap(),
+        Opt::try_parse_from(["test", "ext", "42", "44"]).unwrap(),
         opt
     );
 }
@@ -486,63 +528,105 @@ fn subcommand_name_not_literal() {
         "renamed"
     }
 
-    #[derive(Parser, PartialEq, Debug)]
+    #[derive(Parser, PartialEq, Eq, Debug)]
     struct Opt {
-        #[clap(subcommand)]
+        #[command(subcommand)]
         subcmd: SubCmd,
     }
 
-    #[derive(Subcommand, PartialEq, Debug)]
+    #[derive(Subcommand, PartialEq, Eq, Debug)]
     enum SubCmd {
-        #[clap(name = get_name())]
+        #[command(name = get_name())]
         SubCmd1,
     }
 
-    assert!(Opt::try_parse_from(&["test", "renamed"]).is_ok());
+    assert!(Opt::try_parse_from(["test", "renamed"]).is_ok());
 }
 
 #[test]
 fn skip_subcommand() {
-    #[derive(Debug, PartialEq, Parser)]
+    #[derive(Debug, PartialEq, Eq, Parser)]
     struct Opt {
-        #[clap(subcommand)]
+        #[command(subcommand)]
         sub: Subcommands,
     }
 
-    #[derive(Debug, PartialEq, Subcommand)]
+    #[derive(Debug, PartialEq, Eq, Subcommand)]
     enum Subcommands {
         Add,
         Remove,
 
         #[allow(dead_code)]
-        #[clap(skip)]
+        #[command(skip)]
         Skip,
+
+        #[allow(dead_code)]
+        #[command(skip)]
+        Other(Other),
     }
 
+    #[allow(dead_code)]
+    #[derive(Debug, PartialEq, Eq)]
+    enum Other {
+        One,
+        Twp,
+    }
+
+    assert!(Subcommands::has_subcommand("add"));
+    assert!(Subcommands::has_subcommand("remove"));
+    assert!(!Subcommands::has_subcommand("skip"));
+    assert!(!Subcommands::has_subcommand("other"));
+
     assert_eq!(
-        Opt::try_parse_from(&["test", "add"]).unwrap(),
+        Opt::try_parse_from(["test", "add"]).unwrap(),
         Opt {
             sub: Subcommands::Add
         }
     );
 
     assert_eq!(
-        Opt::try_parse_from(&["test", "remove"]).unwrap(),
+        Opt::try_parse_from(["test", "remove"]).unwrap(),
         Opt {
             sub: Subcommands::Remove
         }
     );
 
-    let res = Opt::try_parse_from(&["test", "skip"]);
-    assert!(
-        matches!(
-            res,
-            Err(clap::Error {
-                kind: clap::ErrorKind::UnknownArgument,
-                ..
-            })
-        ),
-        "Unexpected result: {:?}",
-        res
+    let res = Opt::try_parse_from(["test", "skip"]);
+    assert_eq!(
+        res.unwrap_err().kind(),
+        clap::error::ErrorKind::InvalidSubcommand,
+    );
+
+    let res = Opt::try_parse_from(["test", "other"]);
+    assert_eq!(
+        res.unwrap_err().kind(),
+        clap::error::ErrorKind::InvalidSubcommand,
+    );
+}
+
+#[test]
+fn built_in_subcommand_escaped() {
+    #[derive(Debug, PartialEq, Eq, Parser)]
+    enum Command {
+        Install {
+            arg: Option<String>,
+        },
+        #[command(external_subcommand)]
+        Custom(Vec<String>),
+    }
+
+    assert_eq!(
+        Command::try_parse_from(["test", "install", "arg"]).unwrap(),
+        Command::Install {
+            arg: Some(String::from("arg"))
+        }
+    );
+    assert_eq!(
+        Command::try_parse_from(["test", "--", "install"]).unwrap(),
+        Command::Custom(vec![String::from("install")])
+    );
+    assert_eq!(
+        Command::try_parse_from(["test", "--", "install", "arg"]).unwrap(),
+        Command::Custom(vec![String::from("install"), String::from("arg")])
     );
 }

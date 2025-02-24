@@ -1,97 +1,93 @@
-use clap::IntoApp;
+use clap::CommandFactory;
 use clap::Parser;
+
+use crate::utils::get_help;
+use crate::utils::get_long_help;
+
 #[test]
 fn app_name_in_short_help_from_struct() {
     #[derive(Parser)]
-    #[clap(name = "my-app")]
+    #[command(name = "my-cmd")]
     struct MyApp {}
 
-    let mut help = Vec::new();
-    MyApp::into_app().write_help(&mut help).unwrap();
-    let help = String::from_utf8(help).unwrap();
+    let help = get_help::<MyApp>();
 
-    assert!(help.contains("my-app"));
+    assert!(help.contains("my-cmd"));
 }
 
 #[test]
 fn app_name_in_long_help_from_struct() {
     #[derive(Parser)]
-    #[clap(name = "my-app")]
+    #[command(name = "my-cmd")]
     struct MyApp {}
 
-    let mut help = Vec::new();
-    MyApp::into_app().write_long_help(&mut help).unwrap();
-    let help = String::from_utf8(help).unwrap();
+    let help = get_help::<MyApp>();
 
-    assert!(help.contains("my-app"));
+    assert!(help.contains("my-cmd"));
 }
 
 #[test]
 fn app_name_in_short_help_from_enum() {
     #[derive(Parser)]
-    #[clap(name = "my-app")]
+    #[command(name = "my-cmd")]
     enum MyApp {}
 
-    let mut help = Vec::new();
-    MyApp::into_app().write_help(&mut help).unwrap();
-    let help = String::from_utf8(help).unwrap();
+    let help = get_help::<MyApp>();
 
-    assert!(help.contains("my-app"));
+    assert!(help.contains("my-cmd"));
 }
 
 #[test]
 fn app_name_in_long_help_from_enum() {
     #[derive(Parser)]
-    #[clap(name = "my-app")]
+    #[command(name = "my-cmd")]
     enum MyApp {}
 
-    let mut help = Vec::new();
-    MyApp::into_app().write_long_help(&mut help).unwrap();
-    let help = String::from_utf8(help).unwrap();
+    let help = get_long_help::<MyApp>();
 
-    assert!(help.contains("my-app"));
+    assert!(help.contains("my-cmd"));
 }
 
 #[test]
 fn app_name_in_short_version_from_struct() {
     #[derive(Parser)]
-    #[clap(name = "my-app")]
+    #[command(name = "my-cmd")]
     struct MyApp {}
 
-    let version = MyApp::into_app().render_version();
+    let version = MyApp::command().render_version();
 
-    assert!(version.contains("my-app"));
+    assert!(version.contains("my-cmd"));
 }
 
 #[test]
 fn app_name_in_long_version_from_struct() {
     #[derive(Parser)]
-    #[clap(name = "my-app")]
+    #[command(name = "my-cmd")]
     struct MyApp {}
 
-    let version = MyApp::into_app().render_long_version();
+    let version = MyApp::command().render_long_version();
 
-    assert!(version.contains("my-app"));
+    assert!(version.contains("my-cmd"));
 }
 
 #[test]
 fn app_name_in_short_version_from_enum() {
     #[derive(Parser)]
-    #[clap(name = "my-app")]
+    #[command(name = "my-cmd")]
     enum MyApp {}
 
-    let version = MyApp::into_app().render_version();
+    let version = MyApp::command().render_version();
 
-    assert!(version.contains("my-app"));
+    assert!(version.contains("my-cmd"));
 }
 
 #[test]
 fn app_name_in_long_version_from_enum() {
     #[derive(Parser)]
-    #[clap(name = "my-app")]
+    #[command(name = "my-cmd")]
     enum MyApp {}
 
-    let version = MyApp::into_app().render_long_version();
+    let version = MyApp::command().render_long_version();
 
-    assert!(version.contains("my-app"));
+    assert!(version.contains("my-cmd"));
 }

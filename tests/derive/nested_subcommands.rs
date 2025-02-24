@@ -16,11 +16,11 @@ use clap::{Parser, Subcommand};
 
 #[derive(Parser, PartialEq, Debug)]
 struct Opt {
-    #[clap(short, long)]
+    #[arg(short, long)]
     force: bool,
-    #[clap(short, long, parse(from_occurrences))]
-    verbose: u64,
-    #[clap(subcommand)]
+    #[arg(short, long, action = clap::ArgAction::Count)]
+    verbose: u8,
+    #[command(subcommand)]
     cmd: Sub,
 }
 
@@ -32,17 +32,17 @@ enum Sub {
 
 #[derive(Parser, PartialEq, Debug)]
 struct Opt2 {
-    #[clap(short, long)]
+    #[arg(short, long)]
     force: bool,
-    #[clap(short, long, parse(from_occurrences))]
-    verbose: u64,
-    #[clap(subcommand)]
+    #[arg(short, long, action = clap::ArgAction::Count)]
+    verbose: u8,
+    #[command(subcommand)]
     cmd: Option<Sub>,
 }
 
 #[test]
 fn test_no_cmd() {
-    let result = Opt::try_parse_from(&["test"]);
+    let result = Opt::try_parse_from(["test"]);
     assert!(result.is_err());
 
     assert_eq!(
@@ -51,7 +51,7 @@ fn test_no_cmd() {
             verbose: 0,
             cmd: None
         },
-        Opt2::try_parse_from(&["test"]).unwrap()
+        Opt2::try_parse_from(["test"]).unwrap()
     );
 }
 
@@ -63,7 +63,7 @@ fn test_fetch() {
             verbose: 3,
             cmd: Sub::Fetch {}
         },
-        Opt::try_parse_from(&["test", "-vvv", "fetch"]).unwrap()
+        Opt::try_parse_from(["test", "-vvv", "fetch"]).unwrap()
     );
     assert_eq!(
         Opt {
@@ -71,7 +71,7 @@ fn test_fetch() {
             verbose: 0,
             cmd: Sub::Fetch {}
         },
-        Opt::try_parse_from(&["test", "--force", "fetch"]).unwrap()
+        Opt::try_parse_from(["test", "--force", "fetch"]).unwrap()
     );
 }
 
@@ -83,7 +83,7 @@ fn test_add() {
             verbose: 0,
             cmd: Sub::Add {}
         },
-        Opt::try_parse_from(&["test", "add"]).unwrap()
+        Opt::try_parse_from(["test", "add"]).unwrap()
     );
     assert_eq!(
         Opt {
@@ -91,27 +91,27 @@ fn test_add() {
             verbose: 2,
             cmd: Sub::Add {}
         },
-        Opt::try_parse_from(&["test", "-vv", "add"]).unwrap()
+        Opt::try_parse_from(["test", "-vv", "add"]).unwrap()
     );
 }
 
 #[test]
 fn test_badinput() {
-    let result = Opt::try_parse_from(&["test", "badcmd"]);
+    let result = Opt::try_parse_from(["test", "badcmd"]);
     assert!(result.is_err());
-    let result = Opt::try_parse_from(&["test", "add", "--verbose"]);
+    let result = Opt::try_parse_from(["test", "add", "--verbose"]);
     assert!(result.is_err());
-    let result = Opt::try_parse_from(&["test", "--badopt", "add"]);
+    let result = Opt::try_parse_from(["test", "--badopt", "add"]);
     assert!(result.is_err());
-    let result = Opt::try_parse_from(&["test", "add", "--badopt"]);
+    let result = Opt::try_parse_from(["test", "add", "--badopt"]);
     assert!(result.is_err());
 }
 
 #[derive(Parser, PartialEq, Debug)]
 struct Opt3 {
-    #[clap(short, long)]
+    #[arg(short, long)]
     all: bool,
-    #[clap(subcommand)]
+    #[command(subcommand)]
     cmd: Sub2,
 }
 
@@ -119,7 +119,7 @@ struct Opt3 {
 enum Sub2 {
     Foo {
         file: String,
-        #[clap(subcommand)]
+        #[command(subcommand)]
         cmd: Sub3,
     },
     Bar {},
@@ -141,18 +141,18 @@ fn test_subsubcommand() {
                 cmd: Sub3::Quux {}
             }
         },
-        Opt3::try_parse_from(&["test", "--all", "foo", "lib.rs", "quux"]).unwrap()
+        Opt3::try_parse_from(["test", "--all", "foo", "lib.rs", "quux"]).unwrap()
     );
 }
 
 #[derive(Parser, PartialEq, Debug)]
 enum SubSubCmdWithOption {
     Remote {
-        #[clap(subcommand)]
+        #[command(subcommand)]
         cmd: Option<Remote>,
     },
     Stash {
-        #[clap(subcommand)]
+        #[command(subcommand)]
         cmd: Stash,
     },
 }

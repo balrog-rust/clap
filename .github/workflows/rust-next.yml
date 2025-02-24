@@ -1,13 +1,27 @@
 name: rust-next
+
+permissions:
+  contents: read
+
 on:
   schedule:
   - cron: '3 3 3 * *'
+
+env:
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+  CLICOLOR: 1
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Test
     strategy:
       matrix:
-        build: [stable, linux, windows, mac, nightly, minimal, default]
+        build: [stable, linux, windows, mac, nightly, minimal, default, next]
         include:
         - build: stable
           os: ubuntu-latest
@@ -37,18 +51,23 @@ jobs:
           os: ubuntu-latest
           rust: "stable"
           features: "default"
+        - build: next
+          os: ubuntu-latest
+          rust: "stable"
+          features: "next"
     continue-on-error: ${{ matrix.rust != 'stable' }}
     runs-on: ${{ matrix.os }}
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
     - name: Install Rust
-      uses: actions-rs/toolchain@v1
+      uses: dtolnay/rust-toolchain@stable
       with:
         toolchain: ${{ matrix.rust }}
-        profile: minimal
-        override: true
-    - uses: Swatinem/rust-cache@v1
+    - uses: Swatinem/rust-cache@v2
+    - name: Install shells
+      if: runner.os == 'Linux'
+      run: sudo apt-get install -y elvish fish zsh
     - name: Build
       run: make build-${{matrix.features}}
     - name: Test
@@ -58,53 +77,41 @@ jobs:
     - name: Test (ultra-minimal)
       if: matrix.build == 'minimal'
       run: make test-minimal ARGS='--manifest-path Cargo.toml'
-  rustfmt:
-    name: rustfmt
+    - name: Test dynamic completions
+      run: cargo test -p clap_complete -F unstable-dynamic
+  latest:
+    name: "Check latest dependencies"
     strategy:
       matrix:
-        rust:
-        - stable
-        - beta
-    continue-on-error: ${{ matrix.rust != 'stable' }}
-    runs-on: ubuntu-latest
+        build: [stable]
+        include:
+        - build: stable
+          os: ubuntu-latest
+          rust: "stable"
+          features: "full"
+    runs-on: ${{ matrix.os }}
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
     - name: Install Rust
-      uses: actions-rs/toolchain@v1
+      uses: dtolnay/rust-toolchain@stable
       with:
-        toolchain: ${{ matrix.rust }}
-        profile: minimal
-        override: true
-        components: rustfmt
-    - uses: Swatinem/rust-cache@v1
-    - name: Check formatting
-      run: cargo fmt --all -- --check
-  clippy:
-    name: clippy
-    strategy:
-      matrix:
-        rust:
-        - 1.54.0  # MSRV
-        - stable
-    continue-on-error: ${{ matrix.rust != '1.54.0' }}  # MSRV
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v2
-    - name: Install Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: ${{ matrix.rust }}
-        profile: minimal
-        override: true
-        components: clippy
-    - uses: Swatinem/rust-cache@v1
-    - name: Lint (ultra-minimal)
-      run: make clippy-minimal ARGS='--manifest-path Cargo.toml'
-    - name: Lint Minimal
-      run: make clippy-minimal
-    - name: Lint All
-      run: make clippy-full
-    - name: Lint (release)
-      run: make clippy-release
+        toolchain: stable
+    - uses: Swatinem/rust-cache@v2
+    - uses: taiki-e/install-action@cargo-hack
+    - name: Install shells
+      if: runner.os == 'Linux'
+      run: sudo apt-get install -y elvish fish zsh
+    - name: Update dependencies
+      run: cargo update
+    - name: Build
+      run: make build-${{matrix.features}}
+    - name: Test
+      run: make test-${{matrix.features}}
+    - name: Test (benches)
+      run: make test-${{matrix.features}} ARGS='--workspace --benches'
+    - name: Test (ultra-minimal)
+      if: matrix.build == 'minimal'
+      run: make test-minimal ARGS='--manifest-path Cargo.toml'
+    - name: Test dynamic completions
+      run: cargo test -p clap_complete -F unstable-dynamic

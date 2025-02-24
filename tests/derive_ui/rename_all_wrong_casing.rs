@@ -9,13 +9,13 @@
 use clap::Parser;
 
 #[derive(Parser, Debug)]
-#[clap(name = "basic", rename_all = "fail")]
+#[command(name = "basic", rename_all = "fail")]
 struct Opt {
-    #[clap(short)]
+    #[arg(short)]
     s: String,
 }
 
 fn main() {
     let opt = Opt::parse();
-    println!("{:?}", opt);
+    println!("{opt:?}");
 }

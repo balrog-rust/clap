@@ -1,74 +1,115 @@
-use crate::utils;
-use clap::{arg, App, Arg, ErrorKind};
+use std::ffi::OsStr;
+use std::ffi::OsString;
+
+use clap::builder::ArgPredicate;
+#[cfg(feature = "error-context")]
+use clap::error::ErrorKind;
+use clap::{arg, value_parser, Arg, ArgAction, Command};
+use snapbox::str;
+
+#[cfg(feature = "error-context")]
+use super::utils;
 
 #[test]
 fn opts() {
-    let r = App::new("df")
-        .arg(
-            arg!(o: -o <opt> "some opt")
-                .required(false)
-                .default_value("default"),
-        )
+    let r = Command::new("df")
+        .arg(arg!(o: -o <opt> "some opt").default_value("default"))
         .try_get_matches_from(vec![""]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("o"));
-    assert_eq!(m.value_of("o").unwrap(), "default");
+    assert!(m.contains_id("o"));
+    assert_eq!(
+        m.value_source("o").unwrap(),
+        clap::parser::ValueSource::DefaultValue
+    );
+    assert_eq!(
+        m.get_one::<String>("o").map(|v| v.as_str()).unwrap(),
+        "default"
+    );
 }
 
 #[test]
+fn default_has_index() {
+    let r = Command::new("df")
+        .arg(arg!(o: -o <opt> "some opt").default_value("default"))
+        .try_get_matches_from(vec![""]);
+    assert!(r.is_ok(), "{}", r.unwrap_err());
+    let m = r.unwrap();
+    assert_eq!(m.index_of("o"), Some(1));
+}
+
+#[test]
+#[cfg(feature = "error-context")]
 fn opt_without_value_fail() {
-    let r = App::new("df")
+    let r = Command::new("df")
         .arg(
             arg!(o: -o <opt> "some opt")
-                .required(false)
                 .default_value("default")
-                .forbid_empty_values(true),
+                .value_parser(clap::builder::NonEmptyStringValueParser::new()),
         )
         .try_get_matches_from(vec!["", "-o"]);
     assert!(r.is_err());
     let err = r.unwrap_err();
-    assert_eq!(err.kind, ErrorKind::EmptyValue);
-    assert!(err
-        .to_string()
-        .contains("The argument '-o <opt>' requires a value but none was supplied"));
+    utils::assert_error(err, ErrorKind::InvalidValue, str![[r#"
+error: a value is required for '-o <opt>' but none was supplied
+
+For more information, try '--help'.
+
+"#]], true);
 }
 
 #[test]
 fn opt_user_override() {
-    let r = App::new("df")
-        .arg(
-            arg!(--opt <FILE> "some arg")
-                .required(false)
-                .default_value("default"),
-        )
+    let r = Command::new("df")
+        .arg(arg!(--opt <FILE> "some arg").default_value("default"))
         .try_get_matches_from(vec!["", "--opt", "value"]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("opt"));
-    assert_eq!(m.value_of("opt").unwrap(), "value");
+    assert!(m.contains_id("opt"));
+    assert_eq!(
+        m.value_source("opt").unwrap(),
+        clap::parser::ValueSource::CommandLine
+    );
+    assert_eq!(
+        m.get_one::<String>("opt").map(|v| v.as_str()).unwrap(),
+        "value"
+    );
 }
 
 #[test]
 fn positionals() {
-    let r = App::new("df")
+    let r = Command::new("df")
         .arg(arg!([arg] "some opt").default_value("default"))
         .try_get_matches_from(vec![""]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.value_of("arg").unwrap(), "default");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.value_source("arg").unwrap(),
+        clap::parser::ValueSource::DefaultValue
+    );
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "default"
+    );
 }
 
 #[test]
 fn positional_user_override() {
-    let r = App::new("df")
+    let r = Command::new("df")
         .arg(arg!([arg] "some arg").default_value("default"))
         .try_get_matches_from(vec!["", "value"]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.value_of("arg").unwrap(), "value");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.value_source("arg").unwrap(),
+        clap::parser::ValueSource::CommandLine
+    );
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "value"
+    );
 }
 
 // OsStr Default Values
@@ -78,17 +119,16 @@ fn osstr_opts() {
     use std::ffi::OsStr;
     let expected = OsStr::new("default");
 
-    let r = App::new("df")
-        .arg(
-            arg!(o: -o <opt> "some opt")
-                .required(false)
-                .default_value_os(expected),
-        )
+    let r = Command::new("df")
+        .arg(arg!(o: -o <opt> "some opt").default_value(expected))
         .try_get_matches_from(vec![""]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("o"));
-    assert_eq!(m.value_of("o").unwrap(), expected);
+    assert!(m.contains_id("o"));
+    assert_eq!(
+        m.get_one::<String>("o").map(|v| v.as_str()).unwrap(),
+        expected
+    );
 }
 
 #[test]
@@ -96,17 +136,16 @@ fn osstr_opt_user_override() {
     use std::ffi::OsStr;
     let default = OsStr::new("default");
 
-    let r = App::new("df")
-        .arg(
-            arg!(--opt <FILE> "some arg")
-                .required(false)
-                .default_value_os(default),
-        )
+    let r = Command::new("df")
+        .arg(arg!(--opt <FILE> "some arg").default_value(default))
         .try_get_matches_from(vec!["", "--opt", "value"]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("opt"));
-    assert_eq!(m.value_of("opt").unwrap(), "value");
+    assert!(m.contains_id("opt"));
+    assert_eq!(
+        m.get_one::<String>("opt").map(|v| v.as_str()).unwrap(),
+        "value"
+    );
 }
 
 #[test]
@@ -114,13 +153,16 @@ fn osstr_positionals() {
     use std::ffi::OsStr;
     let expected = OsStr::new("default");
 
-    let r = App::new("df")
-        .arg(arg!([arg] "some opt").default_value_os(expected))
+    let r = Command::new("df")
+        .arg(arg!([arg] "some opt").default_value(expected))
         .try_get_matches_from(vec![""]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.value_of("arg").unwrap(), expected);
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        expected
+    );
 }
 
 #[test]
@@ -128,399 +170,498 @@ fn osstr_positional_user_override() {
     use std::ffi::OsStr;
     let default = OsStr::new("default");
 
-    let r = App::new("df")
-        .arg(arg!([arg] "some arg").default_value_os(default))
+    let r = Command::new("df")
+        .arg(arg!([arg] "some arg").default_value(default))
         .try_get_matches_from(vec!["", "value"]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.value_of("arg").unwrap(), "value");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "value"
+    );
 }
 
 // --- Default if arg is present
 
 #[test]
 fn default_if_arg_present_no_default() {
-    let r = App::new("df")
+    let r = Command::new("df")
         .arg(arg!(--opt <FILE> "some arg").required(true))
-        .arg(arg!([arg] "some arg").default_value_if("opt", None, Some("default")))
+        .arg(arg!([arg] "some arg").default_value_if(
+            "opt",
+            ArgPredicate::IsPresent,
+            Some("default"),
+        ))
         .try_get_matches_from(vec!["", "--opt", "some"]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.value_of("arg").unwrap(), "default");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "default"
+    );
 }
 
 #[test]
 fn default_if_arg_present_no_default_user_override() {
-    let r = App::new("df")
-        .arg(arg!(--opt <FILE> "some arg").required(false))
-        .arg(arg!([arg] "some arg").default_value_if("opt", None, Some("default")))
+    let r = Command::new("df")
+        .arg(arg!(--opt <FILE> "some arg"))
+        .arg(arg!([arg] "some arg").default_value_if(
+            "opt",
+            ArgPredicate::IsPresent,
+            Some("default"),
+        ))
         .try_get_matches_from(vec!["", "--opt", "some", "other"]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.value_of("arg").unwrap(), "other");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "other"
+    );
 }
 
 #[test]
 fn default_if_arg_present_no_arg_with_default() {
-    let r = App::new("df")
-        .arg(arg!(--opt <FILE> "some arg").required(false))
+    let r = Command::new("df")
+        .arg(arg!(--opt <FILE> "some arg"))
         .arg(
             arg!([arg] "some arg")
                 .default_value("first")
-                .default_value_if("opt", None, Some("default")),
+                .default_value_if("opt", ArgPredicate::IsPresent, Some("default")),
         )
         .try_get_matches_from(vec![""]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.value_of("arg").unwrap(), "first");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "first"
+    );
 }
 
 #[test]
 fn default_if_arg_present_with_default() {
-    let r = App::new("df")
-        .arg(arg!(--opt <FILE> "some arg").required(false))
+    let r = Command::new("df")
+        .arg(arg!(--opt <FILE> "some arg"))
         .arg(
             arg!([arg] "some arg")
                 .default_value("first")
-                .default_value_if("opt", None, Some("default")),
+                .default_value_if("opt", ArgPredicate::IsPresent, Some("default")),
         )
         .try_get_matches_from(vec!["", "--opt", "some"]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.value_of("arg").unwrap(), "default");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "default"
+    );
 }
 
 #[test]
 fn default_if_arg_present_with_default_user_override() {
-    let r = App::new("df")
-        .arg(arg!(--opt <FILE> "some arg").required(false))
+    let r = Command::new("df")
+        .arg(arg!(--opt <FILE> "some arg"))
         .arg(
             arg!([arg] "some arg")
                 .default_value("first")
-                .default_value_if("opt", None, Some("default")),
+                .default_value_if("opt", ArgPredicate::IsPresent, Some("default")),
         )
         .try_get_matches_from(vec!["", "--opt", "some", "other"]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.value_of("arg").unwrap(), "other");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "other"
+    );
 }
 
 #[test]
 fn default_if_arg_present_no_arg_with_default_user_override() {
-    let r = App::new("df")
-        .arg(arg!(--opt <FILE> "some arg").required(false))
+    let r = Command::new("df")
+        .arg(arg!(--opt <FILE> "some arg"))
         .arg(
             arg!([arg] "some arg")
                 .default_value("first")
-                .default_value_if("opt", None, Some("default")),
+                .default_value_if("opt", ArgPredicate::IsPresent, Some("default")),
         )
         .try_get_matches_from(vec!["", "other"]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.value_of("arg").unwrap(), "other");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "other"
+    );
 }
 
 // Conditional Default Values
 
 #[test]
 fn default_if_arg_present_with_value_no_default() {
-    let r = App::new("df")
-        .arg(arg!(--opt <FILE> "some arg").required(false))
-        .arg(arg!([arg] "some arg").default_value_if("opt", Some("value"), Some("default")))
+    let r = Command::new("df")
+        .arg(arg!(--opt <FILE> "some arg"))
+        .arg(arg!([arg] "some arg").default_value_if("opt", "value", Some("default")))
         .try_get_matches_from(vec!["", "--opt", "value"]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.value_of("arg").unwrap(), "default");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "default"
+    );
 }
 
 #[test]
 fn default_if_arg_present_with_value_no_default_fail() {
-    let r = App::new("df")
-        .arg(arg!(--opt <FILE> "some arg").required(false))
-        .arg(arg!([arg] "some arg").default_value_if("opt", Some("value"), Some("default")))
+    let r = Command::new("df")
+        .arg(arg!(--opt <FILE> "some arg"))
+        .arg(arg!([arg] "some arg").default_value_if("opt", "value", Some("default")))
         .try_get_matches_from(vec!["", "--opt", "other"]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(!m.is_present("arg"));
-    assert!(m.value_of("arg").is_none());
+    assert!(!m.contains_id("arg"));
+    assert!(m.get_one::<String>("arg").map(|v| v.as_str()).is_none());
 }
 
 #[test]
 fn default_if_arg_present_with_value_no_default_user_override() {
-    let r = App::new("df")
-        .arg(arg!(--opt <FILE> "some arg").required(false))
-        .arg(arg!([arg] "some arg").default_value_if("opt", Some("some"), Some("default")))
+    let r = Command::new("df")
+        .arg(arg!(--opt <FILE> "some arg"))
+        .arg(arg!([arg] "some arg").default_value_if("opt", "some", Some("default")))
         .try_get_matches_from(vec!["", "--opt", "some", "other"]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.value_of("arg").unwrap(), "other");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "other"
+    );
 }
 
 #[test]
 fn default_if_arg_present_with_value_no_arg_with_default() {
-    let r = App::new("df")
-        .arg(arg!(--opt <FILE> "some arg").required(false))
+    let r = Command::new("df")
+        .arg(arg!(--opt <FILE> "some arg"))
         .arg(
             arg!([arg] "some arg")
                 .default_value("first")
-                .default_value_if("opt", Some("some"), Some("default")),
+                .default_value_if("opt", "some", Some("default")),
         )
         .try_get_matches_from(vec![""]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.value_of("arg").unwrap(), "first");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "first"
+    );
 }
 
 #[test]
 fn default_if_arg_present_with_value_no_arg_with_default_fail() {
-    let r = App::new("df")
-        .arg(arg!(--opt <FILE> "some arg").required(false))
+    let r = Command::new("df")
+        .arg(arg!(--opt <FILE> "some arg"))
         .arg(
             arg!([arg] "some arg")
                 .default_value("first")
-                .default_value_if("opt", Some("some"), Some("default")),
+                .default_value_if("opt", "some", Some("default")),
         )
         .try_get_matches_from(vec!["", "--opt", "other"]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.value_of("arg").unwrap(), "first");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "first"
+    );
 }
 
 #[test]
 fn default_if_arg_present_with_value_with_default() {
-    let r = App::new("df")
-        .arg(arg!(--opt <FILE> "some arg").required(false))
+    let r = Command::new("df")
+        .arg(arg!(--opt <FILE> "some arg"))
         .arg(
             arg!([arg] "some arg")
                 .default_value("first")
-                .default_value_if("opt", Some("some"), Some("default")),
+                .default_value_if("opt", "some", Some("default")),
         )
         .try_get_matches_from(vec!["", "--opt", "some"]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.value_of("arg").unwrap(), "default");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "default"
+    );
 }
 
 #[test]
 fn default_if_arg_present_with_value_with_default_user_override() {
-    let r = App::new("df")
-        .arg(arg!(--opt <FILE> "some arg").required(false))
+    let r = Command::new("df")
+        .arg(arg!(--opt <FILE> "some arg"))
         .arg(
             arg!([arg] "some arg")
                 .default_value("first")
-                .default_value_if("opt", Some("some"), Some("default")),
+                .default_value_if("opt", "some", Some("default")),
         )
         .try_get_matches_from(vec!["", "--opt", "some", "other"]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.value_of("arg").unwrap(), "other");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "other"
+    );
 }
 
 #[test]
 fn default_if_arg_present_no_arg_with_value_with_default_user_override() {
-    let r = App::new("df")
-        .arg(arg!(--opt <FILE> "some arg").required(false))
+    let r = Command::new("df")
+        .arg(arg!(--opt <FILE> "some arg"))
         .arg(
             arg!([arg] "some arg")
                 .default_value("first")
-                .default_value_if("opt", Some("some"), Some("default")),
+                .default_value_if("opt", "some", Some("default")),
         )
         .try_get_matches_from(vec!["", "other"]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.value_of("arg").unwrap(), "other");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "other"
+    );
 }
 
 #[test]
 fn default_if_arg_present_no_arg_with_value_with_default_user_override_fail() {
-    let r = App::new("df")
-        .arg(arg!(--opt <FILE> "some arg").required(false))
+    let r = Command::new("df")
+        .arg(arg!(--opt <FILE> "some arg"))
         .arg(
             arg!([arg] "some arg")
                 .default_value("first")
-                .default_value_if("opt", Some("some"), Some("default")),
+                .default_value_if("opt", "some", Some("default")),
         )
         .try_get_matches_from(vec!["", "--opt", "value", "other"]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.value_of("arg").unwrap(), "other");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "other"
+    );
 }
 
 // Unsetting the default
 
 #[test]
 fn no_default_if_arg_present_with_value_no_default() {
-    let r = App::new("df")
-        .arg(arg!(--opt <FILE> "some arg").required(false))
-        .arg(arg!([arg] "some arg").default_value_if("opt", Some("value"), None))
+    let r = Command::new("df")
+        .arg(arg!(--opt <FILE> "some arg"))
+        .arg(arg!([arg] "some arg").default_value_if("opt", "value", None))
         .try_get_matches_from(vec!["", "--opt", "value"]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(!m.is_present("arg"));
+    assert!(!m.contains_id("arg"));
 }
 
 #[test]
 fn no_default_if_arg_present_with_value_with_default() {
-    let r = App::new("df")
-        .arg(arg!(--opt <FILE> "some arg").required(false))
+    let r = Command::new("df")
+        .arg(arg!(--opt <FILE> "some arg"))
         .arg(
             arg!([arg] "some arg")
                 .default_value("default")
-                .default_value_if("opt", Some("value"), None),
+                .default_value_if("opt", "value", None),
         )
         .try_get_matches_from(vec!["", "--opt", "value"]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(!m.is_present("arg"));
-    assert!(m.value_of("arg").is_none());
+    assert!(!m.contains_id("arg"));
+    assert!(m.get_one::<String>("arg").map(|v| v.as_str()).is_none());
 }
 
 #[test]
 fn no_default_if_arg_present_with_value_with_default_user_override() {
-    let r = App::new("df")
-        .arg(arg!(--opt <FILE> "some arg").required(false))
+    let r = Command::new("df")
+        .arg(arg!(--opt <FILE> "some arg"))
         .arg(
             arg!([arg] "some arg")
                 .default_value("default")
-                .default_value_if("opt", Some("value"), None),
+                .default_value_if("opt", "value", None),
         )
         .try_get_matches_from(vec!["", "--opt", "value", "other"]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.value_of("arg").unwrap(), "other");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "other"
+    );
 }
 
 #[test]
 fn no_default_if_arg_present_no_arg_with_value_with_default() {
-    let r = App::new("df")
-        .arg(arg!(--opt <FILE> "some arg").required(false))
+    let r = Command::new("df")
+        .arg(arg!(--opt <FILE> "some arg"))
         .arg(
             arg!([arg] "some arg")
                 .default_value("default")
-                .default_value_if("opt", Some("value"), None),
+                .default_value_if("opt", "value", None),
         )
         .try_get_matches_from(vec!["", "--opt", "other"]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.value_of("arg").unwrap(), "default");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "default"
+    );
 }
 
 // Multiple conditions
 
 #[test]
 fn default_ifs_arg_present() {
-    let r = App::new("df")
-        .arg(arg!(--opt <FILE> "some arg").required(false))
+    let r = Command::new("df")
+        .arg(arg!(--opt <FILE> "some arg"))
         .arg(arg!(--flag "some arg"))
         .arg(
             arg!([arg] "some arg")
                 .default_value("first")
-                .default_value_ifs(&[
-                    ("opt", Some("some"), Some("default")),
-                    ("flag", None, Some("flg")),
+                .default_value_ifs([
+                    ("opt", ArgPredicate::from("some"), Some("default")),
+                    ("flag", ArgPredicate::IsPresent, Some("flg")),
                 ]),
         )
         .try_get_matches_from(vec!["", "--flag"]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.value_of("arg").unwrap(), "flg");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "flg"
+    );
 }
 
 #[test]
 fn no_default_ifs_arg_present() {
-    let r = App::new("df")
-        .arg(arg!(--opt <FILE> "some arg").required(false))
+    let r = Command::new("df")
+        .arg(arg!(--opt <FILE> "some arg"))
         .arg(arg!(--flag "some arg"))
         .arg(
             arg!([arg] "some arg")
                 .default_value("first")
-                .default_value_ifs(&[("opt", Some("some"), Some("default")), ("flag", None, None)]),
+                .default_value_ifs([
+                    ("opt", ArgPredicate::from("some"), Some("default")),
+                    ("flag", ArgPredicate::IsPresent, None),
+                ]),
         )
         .try_get_matches_from(vec!["", "--flag"]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(!m.is_present("arg"));
-    assert!(m.value_of("arg").is_none());
+    assert!(!m.contains_id("arg"));
+    assert!(m.get_one::<String>("arg").map(|v| v.as_str()).is_none());
 }
 
 #[test]
 fn default_ifs_arg_present_user_override() {
-    let r = App::new("df")
-        .arg(arg!(--opt <FILE> "some arg").required(false))
+    let r = Command::new("df")
+        .arg(arg!(--opt <FILE> "some arg"))
         .arg(arg!(--flag "some arg"))
         .arg(
             arg!([arg] "some arg")
                 .default_value("first")
-                .default_value_ifs(&[
-                    ("opt", Some("some"), Some("default")),
-                    ("flag", None, Some("flg")),
+                .default_value_ifs([
+                    ("opt", ArgPredicate::from("some"), Some("default")),
+                    ("flag", ArgPredicate::IsPresent, Some("flg")),
                 ]),
         )
         .try_get_matches_from(vec!["", "--flag", "value"]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.value_of("arg").unwrap(), "value");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "value"
+    );
 }
 
 #[test]
 fn default_ifs_arg_present_order() {
-    let r = App::new("df")
-        .arg(arg!(--opt <FILE> "some arg").required(false))
+    let r = Command::new("df")
+        .arg(arg!(--opt <FILE> "some arg"))
         .arg(arg!(--flag "some arg"))
         .arg(
             arg!([arg] "some arg")
                 .default_value("first")
-                .default_value_ifs(&[
-                    ("opt", Some("some"), Some("default")),
-                    ("flag", None, Some("flg")),
+                .default_value_ifs([
+                    ("opt", ArgPredicate::from("some"), Some("default")),
+                    ("flag", ArgPredicate::IsPresent, Some("flg")),
                 ]),
         )
         .try_get_matches_from(vec!["", "--opt=some", "--flag"]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.value_of("arg").unwrap(), "default");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "default"
+    );
+}
+
+#[test]
+fn default_value_ifs_os() {
+    let cmd = Command::new("my_cargo")
+        .arg(
+            Arg::new("flag")
+                .long("flag")
+                .value_parser(value_parser!(OsString))
+                .action(ArgAction::Set),
+        )
+        .arg(
+            Arg::new("other")
+                .long("other")
+                .value_parser(value_parser!(OsString))
+                .default_value_ifs([("flag", "标记2", OsStr::new("flag=标记2"))]),
+        );
+    let result = cmd.try_get_matches_from(["my_cargo", "--flag", "标记2"]);
+    assert!(result.is_ok(), "{}", result.unwrap_err());
+    let m = result.unwrap();
+    assert_eq!(
+        m.get_one::<OsString>("flag").map(OsString::as_os_str),
+        Some(OsStr::new("标记2"))
+    );
+    assert_eq!(
+        m.get_one::<OsString>("other").map(OsString::as_os_str),
+        Some(OsStr::new("flag=标记2")),
+    );
 }
 
 // Interaction with requires
 
 #[test]
 fn conditional_reqs_pass() {
-    let m = App::new("Test app")
+    let m = Command::new("Test cmd")
         .arg(
             Arg::new("target")
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .default_value("file")
                 .long("target"),
         )
         .arg(
             Arg::new("input")
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .required(true)
                 .long("input"),
         )
         .arg(
             Arg::new("output")
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .required_if_eq("target", "file")
                 .long("output"),
         )
@@ -528,112 +669,150 @@ fn conditional_reqs_pass() {
 
     assert!(m.is_ok(), "{}", m.unwrap_err());
     let m = m.unwrap();
-    assert_eq!(m.value_of("output"), Some("other"));
-    assert_eq!(m.value_of("input"), Some("some"));
+    assert_eq!(
+        m.get_one::<String>("output").map(|v| v.as_str()),
+        Some("other")
+    );
+    assert_eq!(
+        m.get_one::<String>("input").map(|v| v.as_str()),
+        Some("some")
+    );
 }
 
 #[test]
 fn multiple_defaults() {
-    let r = App::new("diff")
+    let r = Command::new("diff")
         .arg(
             Arg::new("files")
                 .long("files")
-                .number_of_values(2)
-                .allow_invalid_utf8(true)
-                .default_values(&["old", "new"]),
+                .num_args(2)
+                .default_values(["old", "new"]),
         )
         .try_get_matches_from(vec![""]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("files"));
-    assert_eq!(m.values_of_lossy("files").unwrap(), vec!["old", "new"]);
+    assert!(m.contains_id("files"));
+    assert_eq!(
+        m.get_many::<String>("files").unwrap().collect::<Vec<_>>(),
+        vec!["old", "new"]
+    );
 }
 
 #[test]
 fn multiple_defaults_override() {
-    let r = App::new("diff")
+    let r = Command::new("diff")
         .arg(
             Arg::new("files")
                 .long("files")
-                .number_of_values(2)
-                .allow_invalid_utf8(true)
-                .default_values(&["old", "new"]),
+                .num_args(2)
+                .default_values(["old", "new"]),
         )
         .try_get_matches_from(vec!["", "--files", "other", "mine"]);
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("files"));
-    assert_eq!(m.values_of_lossy("files").unwrap(), vec!["other", "mine"]);
+    assert!(m.contains_id("files"));
+    assert_eq!(
+        m.get_many::<String>("files").unwrap().collect::<Vec<_>>(),
+        vec!["other", "mine"]
+    );
 }
 
 #[test]
+#[cfg(feature = "error-context")]
 fn default_vals_donnot_show_in_smart_usage() {
-    let app = App::new("bug")
+    let cmd = Command::new("bug")
         .arg(
             Arg::new("foo")
                 .long("config")
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .default_value("bar"),
         )
         .arg(Arg::new("input").required(true));
 
-    assert!(utils::compare_output(
-        app,
+    utils::assert_output(
+        cmd,
         "bug",
-        "error: The following required arguments were not provided:
-    <input>
+        "\
+error: the following required arguments were not provided:
+  <input>
 
-USAGE:
-    bug [OPTIONS] <input>
+Usage: bug <input>
 
-For more information try --help
+For more information, try '--help'.
 ",
         true,
-    ));
+    );
 }
 
 #[test]
 fn issue_1050_num_vals_and_defaults() {
-    let res = App::new("hello")
+    let res = Command::new("hello")
         .arg(
             Arg::new("exit-code")
                 .long("exit-code")
-                .takes_value(true)
-                .number_of_values(1)
+                .action(ArgAction::Set)
+                .num_args(1)
                 .default_value("0"),
         )
         .try_get_matches_from(vec!["hello", "--exit-code=1"]);
     assert!(res.is_ok(), "{}", res.unwrap_err());
     let m = res.unwrap();
-    assert_eq!(m.value_of("exit-code"), Some("1"));
+    assert_eq!(
+        m.get_one::<String>("exit-code").map(|v| v.as_str()),
+        Some("1")
+    );
 }
 
-#[cfg(debug_assertions)]
 #[test]
-#[should_panic = "Argument group 'group' is required but all of it's arguments have a default value."]
 fn required_groups_with_default_values() {
-    use clap::{App, Arg, ArgGroup};
+    use clap::{Arg, ArgGroup, Command};
 
-    let _ = App::new("test")
+    let cmd = Command::new("test")
         .arg(Arg::new("arg").default_value("value"))
-        .group(ArgGroup::new("group").args(&["arg"]).required(true))
-        .try_get_matches();
+        .group(ArgGroup::new("group").args(["arg"]).required(true));
+
+    let result = cmd.clone().try_get_matches_from(["test"]);
+    assert!(result.is_err());
+
+    let result = cmd.clone().try_get_matches_from(["test", "value"]);
+    assert!(result.is_ok(), "{}", result.unwrap_err());
+    let m = result.unwrap();
+    assert!(m.contains_id("arg"));
+    assert!(m.contains_id("group"));
 }
 
-#[cfg(debug_assertions)]
 #[test]
-#[should_panic = "Argument 'arg' is required and can't have a default value"]
 fn required_args_with_default_values() {
-    use clap::{App, Arg};
+    use clap::{Arg, Command};
 
-    let _ = App::new("test")
-        .arg(Arg::new("arg").required(true).default_value("value"))
-        .try_get_matches();
+    let cmd = Command::new("test").arg(Arg::new("arg").required(true).default_value("value"));
+
+    let result = cmd.clone().try_get_matches_from(["test"]);
+    assert!(result.is_err());
+
+    let result = cmd.clone().try_get_matches_from(["test", "value"]);
+    assert!(result.is_ok(), "{}", result.unwrap_err());
+    let m = result.unwrap();
+    assert!(m.contains_id("arg"));
+}
+
+#[test]
+fn valid_delimited_default_values() {
+    use clap::{Arg, Command};
+
+    Command::new("test")
+        .arg(
+            Arg::new("arg")
+                .value_parser(clap::value_parser!(u32))
+                .value_delimiter(',')
+                .default_value("1,2,3"),
+        )
+        .debug_assert();
 }
 
 #[test]
 fn with_value_delimiter() {
-    let app = App::new("multiple_values").arg(
+    let cmd = Command::new("multiple_values").arg(
         Arg::new("option")
             .long("option")
             .help("multiple options")
@@ -641,29 +820,84 @@ fn with_value_delimiter() {
             .default_value("first;second"),
     );
 
-    let matches = app.try_get_matches_from(vec![""]).unwrap();
+    let matches = cmd.try_get_matches_from(vec![""]).unwrap();
 
     assert_eq!(
-        matches.values_of("option").unwrap().collect::<Vec<_>>(),
+        matches
+            .get_many::<String>("option")
+            .unwrap()
+            .map(|v| v.as_str())
+            .collect::<Vec<_>>(),
         ["first", "second"]
     );
 }
 
 #[test]
 fn missing_with_value_delimiter() {
-    let app = App::new("program").arg(
+    let cmd = Command::new("program").arg(
         Arg::new("option")
             .long("option")
             .value_delimiter(';')
-            .default_missing_values(&["value1;value2;value3", "value4;value5"]),
+            .num_args(0..=1)
+            .default_missing_values(["value1;value2;value3", "value4;value5"]),
     );
 
-    let matches = app
+    let matches = cmd
         .try_get_matches_from(vec!["program", "--option"])
         .unwrap();
 
     assert_eq!(
-        matches.values_of("option").unwrap().collect::<Vec<_>>(),
+        matches
+            .get_many::<String>("option")
+            .unwrap()
+            .map(|v| v.as_str())
+            .collect::<Vec<_>>(),
         ["value1", "value2", "value3", "value4", "value5"]
+    );
+}
+
+#[test]
+fn default_independent_of_trailing() {
+    let cmd = Command::new("test")
+        .dont_delimit_trailing_values(true)
+        .arg(Arg::new("pos").required(true))
+        .arg(
+            Arg::new("flag")
+                .long("flag")
+                .default_value("one,two")
+                .value_delimiter(','),
+        );
+
+    // Baseline behavior
+    let m = cmd
+        .clone()
+        .try_get_matches_from(vec!["program", "here"])
+        .unwrap();
+    assert_eq!(
+        m.get_one::<String>("pos").map(|v| v.as_str()).unwrap(),
+        "here"
+    );
+    assert_eq!(
+        m.get_many::<String>("flag")
+            .unwrap()
+            .map(|v| v.as_str())
+            .collect::<Vec<_>>(),
+        ["one", "two"]
+    );
+
+    // Trailing-values behavior should match the baseline
+    let m = cmd
+        .try_get_matches_from(vec!["program", "--", "here"])
+        .unwrap();
+    assert_eq!(
+        m.get_one::<String>("pos").map(|v| v.as_str()).unwrap(),
+        "here"
+    );
+    assert_eq!(
+        m.get_many::<String>("flag")
+            .unwrap()
+            .map(|v| v.as_str())
+            .collect::<Vec<_>>(),
+        ["one", "two"]
     );
 }

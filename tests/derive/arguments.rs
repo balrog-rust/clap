@@ -12,8 +12,9 @@
 // commit#ea76fa1b1b273e65e3b0b1046643715b49bec51f which is licensed under the
 // MIT/Apache 2.0 license.
 
-use clap::IntoApp;
 use clap::Parser;
+
+use crate::utils::get_help;
 
 #[test]
 fn required_argument() {
@@ -23,25 +24,25 @@ fn required_argument() {
     }
     assert_eq!(
         Opt { arg: 42 },
-        Opt::try_parse_from(&["test", "42"]).unwrap()
+        Opt::try_parse_from(["test", "42"]).unwrap()
     );
-    assert!(Opt::try_parse_from(&["test"]).is_err());
-    assert!(Opt::try_parse_from(&["test", "42", "24"]).is_err());
+    assert!(Opt::try_parse_from(["test"]).is_err());
+    assert!(Opt::try_parse_from(["test", "42", "24"]).is_err());
 }
 
 #[test]
 fn argument_with_default() {
     #[derive(Parser, PartialEq, Debug)]
     struct Opt {
-        #[clap(default_value = "42")]
+        #[arg(default_value = "42")]
         arg: i32,
     }
     assert_eq!(
         Opt { arg: 24 },
-        Opt::try_parse_from(&["test", "24"]).unwrap()
+        Opt::try_parse_from(["test", "24"]).unwrap()
     );
-    assert_eq!(Opt { arg: 42 }, Opt::try_parse_from(&["test"]).unwrap());
-    assert!(Opt::try_parse_from(&["test", "42", "24"]).is_err());
+    assert_eq!(Opt { arg: 42 }, Opt::try_parse_from(["test"]).unwrap());
+    assert!(Opt::try_parse_from(["test", "42", "24"]).is_err());
 }
 
 #[test]
@@ -51,15 +52,13 @@ fn auto_value_name() {
         my_special_arg: i32,
     }
 
-    let mut help = Vec::new();
-    Opt::into_app().write_help(&mut help).unwrap();
-    let help = String::from_utf8(help).unwrap();
+    let help = get_help::<Opt>();
 
     assert!(help.contains("MY_SPECIAL_ARG"));
     // Ensure the implicit `num_vals` is just 1
     assert_eq!(
         Opt { my_special_arg: 10 },
-        Opt::try_parse_from(&["test", "10"]).unwrap()
+        Opt::try_parse_from(["test", "10"]).unwrap()
     );
 }
 
@@ -67,20 +66,18 @@ fn auto_value_name() {
 fn explicit_value_name() {
     #[derive(Parser, PartialEq, Debug)]
     struct Opt {
-        #[clap(value_name = "BROWNIE_POINTS")]
+        #[arg(value_name = "BROWNIE_POINTS")]
         my_special_arg: i32,
     }
 
-    let mut help = Vec::new();
-    Opt::into_app().write_help(&mut help).unwrap();
-    let help = String::from_utf8(help).unwrap();
+    let help = get_help::<Opt>();
 
     assert!(help.contains("BROWNIE_POINTS"));
     assert!(!help.contains("MY_SPECIAL_ARG"));
     // Ensure the implicit `num_vals` is just 1
     assert_eq!(
         Opt { my_special_arg: 10 },
-        Opt::try_parse_from(&["test", "10"]).unwrap()
+        Opt::try_parse_from(["test", "10"]).unwrap()
     );
 }
 
@@ -92,10 +89,10 @@ fn option_type_is_optional() {
     }
     assert_eq!(
         Opt { arg: Some(42) },
-        Opt::try_parse_from(&["test", "42"]).unwrap()
+        Opt::try_parse_from(["test", "42"]).unwrap()
     );
-    assert_eq!(Opt { arg: None }, Opt::try_parse_from(&["test"]).unwrap());
-    assert!(Opt::try_parse_from(&["test", "42", "24"]).is_err());
+    assert_eq!(Opt { arg: None }, Opt::try_parse_from(["test"]).unwrap());
+    assert!(Opt::try_parse_from(["test", "42", "24"]).is_err());
 }
 
 #[test]
@@ -106,15 +103,15 @@ fn vec_type_is_multiple_values() {
     }
     assert_eq!(
         Opt { arg: vec![24] },
-        Opt::try_parse_from(&["test", "24"]).unwrap()
+        Opt::try_parse_from(["test", "24"]).unwrap()
     );
-    assert_eq!(Opt { arg: vec![] }, Opt::try_parse_from(&["test"]).unwrap());
+    assert_eq!(Opt { arg: vec![] }, Opt::try_parse_from(["test"]).unwrap());
     assert_eq!(
         Opt { arg: vec![24, 42] },
-        Opt::try_parse_from(&["test", "24", "42"]).unwrap()
+        Opt::try_parse_from(["test", "24", "42"]).unwrap()
     );
     assert_eq!(
-        clap::ErrorKind::ValueValidation,
-        Opt::try_parse_from(&["test", "NOPE"]).err().unwrap().kind
+        clap::error::ErrorKind::ValueValidation,
+        Opt::try_parse_from(["test", "NOPE"]).err().unwrap().kind()
     );
 }

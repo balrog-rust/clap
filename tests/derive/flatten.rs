@@ -25,17 +25,17 @@ fn flatten() {
 
     #[derive(Parser, PartialEq, Debug)]
     struct Opt {
-        #[clap(flatten)]
+        #[command(flatten)]
         common: Common,
     }
     assert_eq!(
         Opt {
             common: Common { arg: 42 }
         },
-        Opt::try_parse_from(&["test", "42"]).unwrap()
+        Opt::try_parse_from(["test", "42"]).unwrap()
     );
-    assert!(Opt::try_parse_from(&["test"]).is_err());
-    assert!(Opt::try_parse_from(&["test", "42", "24"]).is_err());
+    assert!(Opt::try_parse_from(["test"]).is_err());
+    assert!(Opt::try_parse_from(["test", "42", "24"]).is_err());
 }
 
 #[cfg(debug_assertions)]
@@ -49,13 +49,13 @@ fn flatten_twice() {
 
     #[derive(Parser, PartialEq, Debug)]
     struct Opt {
-        #[clap(flatten)]
+        #[command(flatten)]
         c1: Common,
         // Defines "arg" twice, so this should not work.
-        #[clap(flatten)]
+        #[command(flatten)]
         c2: Common,
     }
-    Opt::try_parse_from(&["test", "42", "43"]).unwrap();
+    Opt::try_parse_from(["test", "42", "43"]).unwrap();
 }
 
 #[test]
@@ -67,18 +67,18 @@ fn flatten_in_subcommand() {
 
     #[derive(Args, PartialEq, Debug)]
     struct Add {
-        #[clap(short)]
+        #[arg(short)]
         interactive: bool,
-        #[clap(flatten)]
+        #[command(flatten)]
         common: Common,
     }
 
     #[derive(Parser, PartialEq, Debug)]
     enum Opt {
         Fetch {
-            #[clap(short)]
+            #[arg(short)]
             all: bool,
-            #[clap(flatten)]
+            #[command(flatten)]
             common: Common,
         },
 
@@ -90,14 +90,14 @@ fn flatten_in_subcommand() {
             all: false,
             common: Common { arg: 42 }
         },
-        Opt::try_parse_from(&["test", "fetch", "42"]).unwrap()
+        Opt::try_parse_from(["test", "fetch", "42"]).unwrap()
     );
     assert_eq!(
         Opt::Add(Add {
             interactive: true,
             common: Common { arg: 43 }
         }),
-        Opt::try_parse_from(&["test", "add", "-i", "43"]).unwrap()
+        Opt::try_parse_from(["test", "add", "-i", "43"]).unwrap()
     );
 }
 
@@ -110,21 +110,21 @@ fn update_args_with_flatten() {
 
     #[derive(Parser, PartialEq, Debug)]
     struct Opt {
-        #[clap(flatten)]
+        #[command(flatten)]
         common: Common,
     }
 
     let mut opt = Opt {
         common: Common { arg: 42 },
     };
-    opt.try_update_from(&["test"]).unwrap();
-    assert_eq!(Opt::try_parse_from(&["test", "42"]).unwrap(), opt);
+    opt.try_update_from(["test"]).unwrap();
+    assert_eq!(Opt::try_parse_from(["test", "42"]).unwrap(), opt);
 
     let mut opt = Opt {
         common: Common { arg: 42 },
     };
-    opt.try_update_from(&["test", "52"]).unwrap();
-    assert_eq!(Opt::try_parse_from(&["test", "52"]).unwrap(), opt);
+    opt.try_update_from(["test", "52"]).unwrap();
+    assert_eq!(Opt::try_parse_from(["test", "52"]).unwrap(), opt);
 }
 
 #[derive(Subcommand, PartialEq, Debug)]
@@ -135,6 +135,7 @@ enum BaseCli {
 #[derive(Args, PartialEq, Debug)]
 struct Command1 {
     arg1: i32,
+
     arg2: i32,
 }
 
@@ -145,7 +146,7 @@ struct Command2 {
 
 #[derive(Parser, PartialEq, Debug)]
 enum Opt {
-    #[clap(flatten)]
+    #[command(flatten)]
     BaseCli(BaseCli),
     Command2(Command2),
 }
@@ -154,35 +155,35 @@ enum Opt {
 fn merge_subcommands_with_flatten() {
     assert_eq!(
         Opt::BaseCli(BaseCli::Command1(Command1 { arg1: 42, arg2: 44 })),
-        Opt::try_parse_from(&["test", "command1", "42", "44"]).unwrap()
+        Opt::try_parse_from(["test", "command1", "42", "44"]).unwrap()
     );
     assert_eq!(
         Opt::Command2(Command2 { arg2: 43 }),
-        Opt::try_parse_from(&["test", "command2", "43"]).unwrap()
+        Opt::try_parse_from(["test", "command2", "43"]).unwrap()
     );
 }
 
 #[test]
 fn update_subcommands_with_flatten() {
     let mut opt = Opt::BaseCli(BaseCli::Command1(Command1 { arg1: 12, arg2: 14 }));
-    opt.try_update_from(&["test", "command1", "42", "44"])
+    opt.try_update_from(["test", "command1", "42", "44"])
         .unwrap();
     assert_eq!(
-        Opt::try_parse_from(&["test", "command1", "42", "44"]).unwrap(),
+        Opt::try_parse_from(["test", "command1", "42", "44"]).unwrap(),
         opt
     );
 
     let mut opt = Opt::BaseCli(BaseCli::Command1(Command1 { arg1: 12, arg2: 14 }));
-    opt.try_update_from(&["test", "command1", "42"]).unwrap();
+    opt.try_update_from(["test", "command1", "42"]).unwrap();
     assert_eq!(
-        Opt::try_parse_from(&["test", "command1", "42", "14"]).unwrap(),
+        Opt::try_parse_from(["test", "command1", "42", "14"]).unwrap(),
         opt
     );
 
     let mut opt = Opt::BaseCli(BaseCli::Command1(Command1 { arg1: 12, arg2: 14 }));
-    opt.try_update_from(&["test", "command2", "43"]).unwrap();
+    opt.try_update_from(["test", "command2", "43"]).unwrap();
     assert_eq!(
-        Opt::try_parse_from(&["test", "command2", "43"]).unwrap(),
+        Opt::try_parse_from(["test", "command2", "43"]).unwrap(),
         opt
     );
 }
@@ -199,14 +200,14 @@ fn flatten_with_doc_comment() {
     struct Opt {
         /// The very important comment that clippy had me put here.
         /// It knows better.
-        #[clap(flatten)]
+        #[command(flatten)]
         common: Common,
     }
     assert_eq!(
         Opt {
             common: Common { arg: 42 }
         },
-        Opt::try_parse_from(&["test", "42"]).unwrap()
+        Opt::try_parse_from(["test", "42"]).unwrap()
     );
 
     let help = utils::get_help::<Opt>();
@@ -215,18 +216,18 @@ fn flatten_with_doc_comment() {
 }
 
 #[test]
-fn docstrings_ordering_with_multiple_clap() {
+fn docstrings_ordering_with_multiple_command() {
     /// This is the docstring for Flattened
     #[derive(Args)]
     struct Flattened {
-        #[clap(long)]
+        #[arg(long)]
         foo: bool,
     }
 
     /// This is the docstring for Command
     #[derive(Parser)]
     struct Command {
-        #[clap(flatten)]
+        #[command(flatten)]
         flattened: Flattened,
     }
 
@@ -240,17 +241,36 @@ fn docstrings_ordering_with_multiple_clap_partial() {
     /// This is the docstring for Flattened
     #[derive(Args)]
     struct Flattened {
-        #[clap(long)]
+        #[arg(long)]
         foo: bool,
     }
 
     #[derive(Parser)]
     struct Command {
-        #[clap(flatten)]
+        #[command(flatten)]
         flattened: Flattened,
     }
 
     let short_help = utils::get_help::<Command>();
 
     assert!(short_help.contains("This is the docstring for Flattened"));
+}
+
+#[test]
+#[should_panic = "cannot `#[flatten]` an `Option<Args>` with `#[group(skip)]`"]
+fn flatten_skipped_group() {
+    #[derive(clap::Parser, Debug)]
+    struct Cli {
+        #[clap(flatten)]
+        args: Option<Args>,
+    }
+
+    #[derive(clap::Args, Debug)]
+    #[group(skip)]
+    struct Args {
+        #[clap(short)]
+        param: bool,
+    }
+
+    Cli::try_parse_from(["test"]).unwrap();
 }

@@ -1,136 +1,46 @@
-use crate::utils;
+use clap::{arg, error::ErrorKind, Arg, ArgAction, Command};
 
-use clap::{arg, App, AppSettings, Arg, ErrorKind};
-
-static VISIBLE_ALIAS_HELP: &str = "clap-test 2.6
-
-USAGE:
-    clap-test [SUBCOMMAND]
-
-OPTIONS:
-    -h, --help       Print help information
-    -V, --version    Print version information
-
-SUBCOMMANDS:
-    help    Print this message or the help of the given subcommand(s)
-    test    Some help [aliases: dongle, done]
-";
-
-static INVISIBLE_ALIAS_HELP: &str = "clap-test 2.6
-
-USAGE:
-    clap-test [SUBCOMMAND]
-
-OPTIONS:
-    -h, --help       Print help information
-    -V, --version    Print version information
-
-SUBCOMMANDS:
-    help    Print this message or the help of the given subcommand(s)
-    test    Some help
-";
-
-static SUBCMD_ALPHA_ORDER: &str = "test 1
-
-USAGE:
-    test [SUBCOMMAND]
-
-OPTIONS:
-    -h, --help       Print help information
-    -V, --version    Print version information
-
-SUBCOMMANDS:
-    a1      blah a1
-    b1      blah b1
-    help    Print this message or the help of the given subcommand(s)
-";
-
-static SUBCMD_DECL_ORDER: &str = "test 1
-
-USAGE:
-    test [SUBCOMMAND]
-
-OPTIONS:
-    -h, --help       Print help information
-    -V, --version    Print version information
-
-SUBCOMMANDS:
-    b1      blah b1
-    a1      blah a1
-    help    Print this message or the help of the given subcommand(s)
-";
-
-#[cfg(feature = "suggestions")]
-static DYM_SUBCMD: &str = "error: The subcommand 'subcm' wasn't recognized
-
-	Did you mean 'subcmd'?
-
-If you believe you received this message in error, try re-running with 'dym -- subcm'
-
-USAGE:
-    dym [SUBCOMMAND]
-
-For more information try --help
-";
-
-#[cfg(feature = "suggestions")]
-static DYM_SUBCMD_AMBIGUOUS: &str = "error: The subcommand 'te' wasn't recognized
-
-	Did you mean 'test' or 'temp'?
-
-If you believe you received this message in error, try re-running with 'dym -- te'
-
-USAGE:
-    dym [SUBCOMMAND]
-
-For more information try --help
-";
-
-static SUBCMD_AFTER_DOUBLE_DASH: &str =
-    "error: Found argument 'subcmd' which wasn't expected, or isn't valid in this context
-
-\tIf you tried to supply `subcmd` as a subcommand, remove the '--' before it.
-
-USAGE:
-    app [SUBCOMMAND]
-
-For more information try --help
-";
+use super::utils;
+use snapbox::assert_data_eq;
+use snapbox::str;
 
 #[test]
 fn subcommand() {
-    let m = App::new("test")
-        .subcommand(
-            App::new("some").arg(
+    let m = Command::new("test")
+        .subcommand(Command::new("some").defer(|cmd| {
+            cmd.arg(
                 Arg::new("test")
                     .short('t')
                     .long("test")
-                    .takes_value(true)
+                    .action(ArgAction::Set)
                     .help("testing testing"),
-            ),
-        )
+            )
+        }))
         .arg(Arg::new("other").long("other"))
         .try_get_matches_from(vec!["myprog", "some", "--test", "testing"])
         .unwrap();
 
     assert_eq!(m.subcommand_name().unwrap(), "some");
     let sub_m = m.subcommand_matches("some").unwrap();
-    assert!(sub_m.is_present("test"));
-    assert_eq!(sub_m.value_of("test").unwrap(), "testing");
+    assert!(sub_m.contains_id("test"));
+    assert_eq!(
+        sub_m.get_one::<String>("test").map(|v| v.as_str()).unwrap(),
+        "testing"
+    );
 }
 
 #[test]
 fn subcommand_none_given() {
-    let m = App::new("test")
-        .subcommand(
-            App::new("some").arg(
+    let m = Command::new("test")
+        .subcommand(Command::new("some").defer(|cmd| {
+            cmd.arg(
                 Arg::new("test")
                     .short('t')
                     .long("test")
-                    .takes_value(true)
+                    .action(ArgAction::Set)
                     .help("testing testing"),
-            ),
-        )
+            )
+        }))
         .arg(Arg::new("other").long("other"))
         .try_get_matches_from(vec![""])
         .unwrap();
@@ -140,16 +50,18 @@ fn subcommand_none_given() {
 
 #[test]
 fn subcommand_multiple() {
-    let m = App::new("test")
+    let m = Command::new("test")
         .subcommands(vec![
-            App::new("some").arg(
-                Arg::new("test")
-                    .short('t')
-                    .long("test")
-                    .takes_value(true)
-                    .help("testing testing"),
-            ),
-            App::new("add").arg(Arg::new("roster").short('r')),
+            Command::new("some").defer(|cmd| {
+                cmd.arg(
+                    Arg::new("test")
+                        .short('t')
+                        .long("test")
+                        .action(ArgAction::Set)
+                        .help("testing testing"),
+                )
+            }),
+            Command::new("add").defer(|cmd| cmd.arg(Arg::new("roster").short('r'))),
         ])
         .arg(Arg::new("other").long("other"))
         .try_get_matches_from(vec!["myprog", "some", "--test", "testing"])
@@ -159,52 +71,17 @@ fn subcommand_multiple() {
     assert!(m.subcommand_matches("add").is_none());
     assert_eq!(m.subcommand_name().unwrap(), "some");
     let sub_m = m.subcommand_matches("some").unwrap();
-    assert!(sub_m.is_present("test"));
-    assert_eq!(sub_m.value_of("test").unwrap(), "testing");
-}
-
-#[test]
-fn subcommand_display_order() {
-    let app_subcmd_alpha_order = App::new("test").version("1").subcommands(vec![
-        App::new("b1")
-            .about("blah b1")
-            .arg(Arg::new("test").short('t')),
-        App::new("a1")
-            .about("blah a1")
-            .arg(Arg::new("roster").short('r')),
-    ]);
-
-    assert!(utils::compare_output(
-        app_subcmd_alpha_order,
-        "test --help",
-        SUBCMD_ALPHA_ORDER,
-        false,
-    ));
-
-    let app_subcmd_decl_order = App::new("test")
-        .version("1")
-        .setting(clap::AppSettings::DeriveDisplayOrder)
-        .subcommands(vec![
-            App::new("b1")
-                .about("blah b1")
-                .arg(Arg::new("test").short('t')),
-            App::new("a1")
-                .about("blah a1")
-                .arg(Arg::new("roster").short('r')),
-        ]);
-
-    assert!(utils::compare_output(
-        app_subcmd_decl_order,
-        "test --help",
-        SUBCMD_DECL_ORDER,
-        false,
-    ));
+    assert!(sub_m.contains_id("test"));
+    assert_eq!(
+        sub_m.get_one::<String>("test").map(|v| v.as_str()).unwrap(),
+        "testing"
+    );
 }
 
 #[test]
 fn single_alias() {
-    let m = App::new("myprog")
-        .subcommand(App::new("test").alias("do-stuff"))
+    let m = Command::new("myprog")
+        .subcommand(Command::new("test").alias("do-stuff"))
         .try_get_matches_from(vec!["myprog", "do-stuff"])
         .unwrap();
     assert_eq!(m.subcommand_name(), Some("test"));
@@ -212,8 +89,8 @@ fn single_alias() {
 
 #[test]
 fn multiple_aliases() {
-    let m = App::new("myprog")
-        .subcommand(App::new("test").aliases(&["do-stuff", "test-stuff"]))
+    let m = Command::new("myprog")
+        .subcommand(Command::new("test").aliases(["do-stuff", "test-stuff"]))
         .try_get_matches_from(vec!["myprog", "test-stuff"])
         .unwrap();
     assert_eq!(m.subcommand_name(), Some("test"));
@@ -221,169 +98,178 @@ fn multiple_aliases() {
 
 #[test]
 #[cfg(feature = "suggestions")]
+#[cfg(feature = "error-context")]
 fn subcmd_did_you_mean_output() {
-    let app = App::new("dym").subcommand(App::new("subcmd"));
-    assert!(utils::compare_output(app, "dym subcm", DYM_SUBCMD, true));
+    #[cfg(feature = "suggestions")]
+    static DYM_SUBCMD: &str = "\
+error: unrecognized subcommand 'subcm'
+
+  tip: a similar subcommand exists: 'subcmd'
+
+Usage: dym [COMMAND]
+
+For more information, try '--help'.
+";
+
+    let cmd = Command::new("dym").subcommand(Command::new("subcmd"));
+    utils::assert_output(cmd, "dym subcm", DYM_SUBCMD, true);
 }
 
 #[test]
 #[cfg(feature = "suggestions")]
+#[cfg(feature = "error-context")]
 fn subcmd_did_you_mean_output_ambiguous() {
-    let app = App::new("dym")
-        .subcommand(App::new("test"))
-        .subcommand(App::new("temp"));
-    assert!(utils::compare_output(
-        app,
-        "dym te",
-        DYM_SUBCMD_AMBIGUOUS,
-        true
-    ));
+    #[cfg(feature = "suggestions")]
+    static DYM_SUBCMD_AMBIGUOUS: &str = "\
+error: unrecognized subcommand 'te'
+
+  tip: some similar subcommands exist: 'test', 'temp'
+
+Usage: dym [COMMAND]
+
+For more information, try '--help'.
+";
+
+    let cmd = Command::new("dym")
+        .subcommand(Command::new("test"))
+        .subcommand(Command::new("temp"));
+    utils::assert_output(cmd, "dym te", DYM_SUBCMD_AMBIGUOUS, true);
 }
 
 #[test]
 #[cfg(feature = "suggestions")]
+#[cfg(feature = "error-context")]
 fn subcmd_did_you_mean_output_arg() {
-    static EXPECTED: &str =
-        "error: Found argument '--subcmarg' which wasn't expected, or isn't valid in this context
+    static EXPECTED: &str = "\
+error: unexpected argument '--subcmarg' found
 
-\tDid you mean to put '--subcmdarg' after the subcommand 'subcmd'?
+  tip: 'subcmd --subcmdarg' exists
 
-\tIf you tried to supply `--subcmarg` as a value rather than a flag, use `-- --subcmarg`
+Usage: dym [COMMAND]
 
-USAGE:
-    dym [SUBCOMMAND]
-
-For more information try --help
+For more information, try '--help'.
 ";
 
-    let app = App::new("dym").subcommand(
-        App::new("subcmd").arg(arg!(-s --subcmdarg <subcmdarg> "tests").required(false)),
+    let cmd = Command::new("dym").subcommand(
+        Command::new("subcmd").defer(|cmd| cmd.arg(arg!(-s --subcmdarg <subcmdarg> "tests"))),
     );
 
-    assert!(utils::compare_output(
-        app,
-        "dym --subcmarg subcmd",
-        EXPECTED,
-        true
-    ));
+    utils::assert_output(cmd, "dym --subcmarg subcmd", EXPECTED, true);
 }
 
 #[test]
 #[cfg(feature = "suggestions")]
+#[cfg(feature = "error-context")]
 fn subcmd_did_you_mean_output_arg_false_positives() {
-    static EXPECTED: &str =
-        "error: Found argument '--subcmarg' which wasn't expected, or isn't valid in this context
+    static EXPECTED: &str = "\
+error: unexpected argument '--subcmarg' found
 
-\tIf you tried to supply `--subcmarg` as a value rather than a flag, use `-- --subcmarg`
+Usage: dym [COMMAND]
 
-USAGE:
-    dym [SUBCOMMAND]
-
-For more information try --help
+For more information, try '--help'.
 ";
 
-    let app = App::new("dym").subcommand(
-        App::new("subcmd").arg(arg!(-s --subcmdarg <subcmdarg> "tests").required(false)),
+    let cmd = Command::new("dym").subcommand(
+        Command::new("subcmd").defer(|cmd| cmd.arg(arg!(-s --subcmdarg <subcmdarg> "tests"))),
     );
 
-    assert!(utils::compare_output(
-        app,
-        "dym --subcmarg foo",
-        EXPECTED,
-        true
-    ));
+    utils::assert_output(cmd, "dym --subcmarg foo", EXPECTED, true);
 }
 
 #[test]
 fn alias_help() {
-    let m = App::new("myprog")
-        .subcommand(App::new("test").alias("do-stuff"))
+    let m = Command::new("myprog")
+        .subcommand(Command::new("test").alias("do-stuff"))
         .try_get_matches_from(vec!["myprog", "help", "do-stuff"]);
     assert!(m.is_err());
-    assert_eq!(m.unwrap_err().kind, ErrorKind::DisplayHelp);
+    assert_eq!(m.unwrap_err().kind(), ErrorKind::DisplayHelp);
 }
 
 #[test]
 fn visible_aliases_help_output() {
-    let app = App::new("clap-test").version("2.6").subcommand(
-        App::new("test")
+    static VISIBLE_ALIAS_HELP: &str = "\
+Usage: clap-test [COMMAND]
+
+Commands:
+  test  Some help [aliases: dongle, done]
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help     Print help
+  -V, --version  Print version
+";
+
+    let cmd = Command::new("clap-test").version("2.6").subcommand(
+        Command::new("test")
             .about("Some help")
             .alias("invisible")
             .visible_alias("dongle")
             .visible_alias("done"),
     );
-    assert!(utils::compare_output(
-        app,
-        "clap-test --help",
-        VISIBLE_ALIAS_HELP,
-        false
-    ));
+    utils::assert_output(cmd, "clap-test --help", VISIBLE_ALIAS_HELP, false);
 }
 
 #[test]
 fn invisible_aliases_help_output() {
-    let app = App::new("clap-test")
+    static INVISIBLE_ALIAS_HELP: &str = "\
+Usage: clap-test [COMMAND]
+
+Commands:
+  test  Some help
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help     Print help
+  -V, --version  Print version
+";
+
+    let cmd = Command::new("clap-test")
         .version("2.6")
-        .subcommand(App::new("test").about("Some help").alias("invisible"));
-    assert!(utils::compare_output(
-        app,
-        "clap-test --help",
-        INVISIBLE_ALIAS_HELP,
-        false
-    ));
-}
-
-#[test]
-#[cfg(feature = "unstable-replace")]
-fn replace() {
-    let m = App::new("prog")
-        .subcommand(App::new("module").subcommand(App::new("install").about("Install module")))
-        .replace("install", &["module", "install"])
-        .try_get_matches_from(vec!["prog", "install"])
-        .unwrap();
-
-    assert_eq!(m.subcommand_name(), Some("module"));
-    assert_eq!(
-        m.subcommand_matches("module").unwrap().subcommand_name(),
-        Some("install")
-    );
+        .subcommand(Command::new("test").about("Some help").alias("invisible"));
+    utils::assert_output(cmd, "clap-test --help", INVISIBLE_ALIAS_HELP, false);
 }
 
 #[test]
 fn issue_1031_args_with_same_name() {
-    let res = App::new("prog")
-        .arg(arg!(--"ui-path" <PATH>))
-        .subcommand(App::new("signer"))
+    let res = Command::new("prog")
+        .arg(arg!(--"ui-path" <PATH>).required(true))
+        .subcommand(Command::new("signer"))
         .try_get_matches_from(vec!["prog", "--ui-path", "signer"]);
 
-    assert!(res.is_ok(), "{:?}", res.unwrap_err().kind);
+    assert!(res.is_ok(), "{:?}", res.unwrap_err().kind());
     let m = res.unwrap();
-    assert_eq!(m.value_of("ui-path"), Some("signer"));
+    assert_eq!(
+        m.get_one::<String>("ui-path").map(|v| v.as_str()),
+        Some("signer")
+    );
 }
 
 #[test]
 fn issue_1031_args_with_same_name_no_more_vals() {
-    let res = App::new("prog")
-        .arg(arg!(--"ui-path" <PATH>))
-        .subcommand(App::new("signer"))
+    let res = Command::new("prog")
+        .arg(arg!(--"ui-path" <PATH>).required(true))
+        .subcommand(Command::new("signer"))
         .try_get_matches_from(vec!["prog", "--ui-path", "value", "signer"]);
 
-    assert!(res.is_ok(), "{:?}", res.unwrap_err().kind);
+    assert!(res.is_ok(), "{:?}", res.unwrap_err().kind());
     let m = res.unwrap();
-    assert_eq!(m.value_of("ui-path"), Some("value"));
+    assert_eq!(
+        m.get_one::<String>("ui-path").map(|v| v.as_str()),
+        Some("value")
+    );
     assert_eq!(m.subcommand_name(), Some("signer"));
 }
 
 #[test]
 fn issue_1161_multiple_hyphen_hyphen() {
     // from example 22
-    let res = App::new("myprog")
+    let res = Command::new("myprog")
         .arg(Arg::new("eff").short('f'))
-        .arg(Arg::new("pea").short('p').takes_value(true))
+        .arg(Arg::new("pea").short('p').action(ArgAction::Set))
         .arg(
             Arg::new("slop")
-                .takes_value(true)
-                .multiple_values(true)
+                .action(ArgAction::Set)
+                .num_args(1..)
                 .last(true),
         )
         .try_get_matches_from(vec![
@@ -399,7 +285,7 @@ fn issue_1161_multiple_hyphen_hyphen() {
             "args",
         ]);
 
-    assert!(res.is_ok(), "{:?}", res.unwrap_err().kind);
+    assert!(res.is_ok(), "{:?}", res.unwrap_err().kind());
     let m = res.unwrap();
 
     let expected = Some(vec![
@@ -411,169 +297,341 @@ fn issue_1161_multiple_hyphen_hyphen() {
         "position",
         "args",
     ]);
-    let actual = m.values_of("slop").map(|vals| vals.collect::<Vec<_>>());
+    let actual = m
+        .get_many::<String>("slop")
+        .map(|vals| vals.map(|s| s.as_str()).collect::<Vec<_>>());
 
     assert_eq!(expected, actual);
 }
 
 #[test]
 fn issue_1722_not_emit_error_when_arg_follows_similar_to_a_subcommand() {
-    let m = App::new("myprog")
-        .subcommand(App::new("subcommand"))
+    let m = Command::new("myprog")
+        .subcommand(Command::new("subcommand"))
         .arg(Arg::new("argument"))
         .try_get_matches_from(vec!["myprog", "--", "subcommand"]);
-    assert_eq!(m.unwrap().value_of("argument"), Some("subcommand"));
+    assert_eq!(
+        m.unwrap().get_one::<String>("argument").map(|v| v.as_str()),
+        Some("subcommand")
+    );
 }
 
 #[test]
 fn subcommand_placeholder_test() {
-    let mut app = App::new("myprog")
-        .subcommand(App::new("subcommand"))
+    let mut cmd = Command::new("myprog")
+        .subcommand(Command::new("subcommand"))
         .subcommand_value_name("TEST_PLACEHOLDER")
         .subcommand_help_heading("TEST_HEADER");
 
-    assert_eq!(&app.render_usage(), "USAGE:\n    myprog [TEST_PLACEHOLDER]");
+    assert_eq!(
+        &cmd.render_usage().to_string(),
+        "Usage: myprog [TEST_PLACEHOLDER]"
+    );
 
-    let mut help_text = Vec::new();
-    app.write_help(&mut help_text)
-        .expect("Failed to write to internal buffer");
+    let help_text = cmd.render_help().to_string();
 
-    assert!(String::from_utf8(help_text)
-        .unwrap()
-        .contains("TEST_HEADER:"));
+    assert!(help_text.contains("TEST_HEADER:"));
 }
 
 #[test]
+#[cfg(feature = "error-context")]
 fn subcommand_used_after_double_dash() {
-    let app = App::new("app").subcommand(App::new("subcmd"));
+    static SUBCMD_AFTER_DOUBLE_DASH: &str = "\
+error: unexpected argument 'subcmd' found
 
-    assert!(utils::compare_output(
-        app,
-        "app -- subcmd",
-        SUBCMD_AFTER_DOUBLE_DASH,
-        true
-    ));
+  tip: subcommand 'subcmd' exists; to use it, remove the '--' before it
+
+Usage: cmd [COMMAND]
+
+For more information, try '--help'.
+";
+
+    let cmd = Command::new("cmd").subcommand(Command::new("subcmd"));
+
+    utils::assert_output(cmd, "cmd -- subcmd", SUBCMD_AFTER_DOUBLE_DASH, true);
 }
 
 #[test]
 fn subcommand_after_argument() {
-    let m = App::new("myprog")
+    let m = Command::new("myprog")
         .arg(Arg::new("some_text"))
-        .subcommand(App::new("test"))
+        .subcommand(Command::new("test"))
         .try_get_matches_from(vec!["myprog", "teat", "test"])
         .unwrap();
-    assert_eq!(m.value_of("some_text"), Some("teat"));
+    assert_eq!(
+        m.get_one::<String>("some_text").map(|v| v.as_str()),
+        Some("teat")
+    );
     assert_eq!(m.subcommand().unwrap().0, "test");
 }
 
 #[test]
 fn subcommand_after_argument_looks_like_help() {
-    let m = App::new("myprog")
+    let m = Command::new("myprog")
         .arg(Arg::new("some_text"))
-        .subcommand(App::new("test"))
+        .subcommand(Command::new("test"))
         .try_get_matches_from(vec!["myprog", "helt", "test"])
         .unwrap();
-    assert_eq!(m.value_of("some_text"), Some("helt"));
+    assert_eq!(
+        m.get_one::<String>("some_text").map(|v| v.as_str()),
+        Some("helt")
+    );
     assert_eq!(m.subcommand().unwrap().0, "test");
 }
 
 #[test]
 fn issue_2494_subcommand_is_present() {
-    let app = App::new("opt")
-        .arg(Arg::new("global").long("global"))
-        .subcommand(App::new("global"));
+    let cmd = Command::new("opt")
+        .arg(Arg::new("global").long("global").action(ArgAction::SetTrue))
+        .subcommand(Command::new("global"));
 
-    let m = app
+    let m = cmd
         .clone()
-        .try_get_matches_from(&["opt", "--global", "global"])
+        .try_get_matches_from(["opt", "--global", "global"])
         .unwrap();
     assert_eq!(m.subcommand_name().unwrap(), "global");
-    assert!(m.is_present("global"));
+    assert!(*m.get_one::<bool>("global").expect("defaulted by clap"));
 
-    let m = app
+    let m = cmd
         .clone()
-        .try_get_matches_from(&["opt", "--global"])
+        .try_get_matches_from(["opt", "--global"])
         .unwrap();
     assert!(m.subcommand_name().is_none());
-    assert!(m.is_present("global"));
+    assert!(*m.get_one::<bool>("global").expect("defaulted by clap"));
 
-    let m = app.try_get_matches_from(&["opt", "global"]).unwrap();
+    let m = cmd.try_get_matches_from(["opt", "global"]).unwrap();
     assert_eq!(m.subcommand_name().unwrap(), "global");
-    assert!(!m.is_present("global"));
+    assert!(!*m.get_one::<bool>("global").expect("defaulted by clap"));
 }
 
 #[test]
+#[cfg(feature = "error-context")]
 fn subcommand_not_recognized() {
-    let app = App::new("fake")
-        .subcommand(App::new("sub"))
-        .setting(AppSettings::DisableHelpSubcommand)
-        .setting(AppSettings::InferSubcommands);
-    assert!(utils::compare_output(
-        app,
+    let cmd = Command::new("fake")
+        .subcommand(Command::new("sub"))
+        .disable_help_subcommand(true)
+        .infer_subcommands(true);
+    utils::assert_output(
+        cmd,
         "fake help",
-        "error:  The subcommand 'help' wasn't recognized
+        "error: unrecognized subcommand 'help'
 
-USAGE:
-    fake <subcommands>
+Usage: fake [COMMAND]
 
-For more information try --help
+For more information, try '--help'.
 ",
-        true
-    ));
+        true,
+    );
 }
 
-#[cfg(feature = "unstable-multicall")]
 #[test]
 fn busybox_like_multicall() {
-    fn applet_commands() -> [App<'static>; 2] {
-        [App::new("true"), App::new("false")]
+    fn applet_commands() -> [Command; 2] {
+        [Command::new("true"), Command::new("false")]
     }
-    let app = App::new("busybox")
-        .setting(AppSettings::Multicall)
-        .subcommand(App::new("busybox").subcommands(applet_commands()))
+    let cmd = Command::new("busybox")
+        .multicall(true)
+        .subcommand(Command::new("busybox").defer(|cmd| cmd.subcommands(applet_commands())))
         .subcommands(applet_commands());
 
-    let m = app
+    let m = cmd
         .clone()
-        .try_get_matches_from(&["busybox", "true"])
+        .try_get_matches_from(["busybox", "true"])
         .unwrap();
     assert_eq!(m.subcommand_name(), Some("busybox"));
     assert_eq!(m.subcommand().unwrap().1.subcommand_name(), Some("true"));
 
-    let m = app.clone().try_get_matches_from(&["true"]).unwrap();
+    let m = cmd.clone().try_get_matches_from(["true"]).unwrap();
     assert_eq!(m.subcommand_name(), Some("true"));
 
-    let m = app.clone().try_get_matches_from(&["a.out"]);
+    let m = cmd.clone().try_get_matches_from(["a.out"]);
     assert!(m.is_err());
-    assert_eq!(m.unwrap_err().kind, ErrorKind::UnknownArgument);
+    assert_eq!(m.unwrap_err().kind(), ErrorKind::InvalidSubcommand);
 }
 
-#[cfg(feature = "unstable-multicall")]
 #[test]
 fn hostname_like_multicall() {
-    let mut app = App::new("hostname")
-        .setting(AppSettings::Multicall)
-        .subcommand(App::new("hostname"))
-        .subcommand(App::new("dnsdomainname"));
+    let mut cmd = Command::new("hostname")
+        .multicall(true)
+        .subcommand(Command::new("hostname"))
+        .subcommand(Command::new("dnsdomainname"));
 
-    let m = app.clone().try_get_matches_from(&["hostname"]).unwrap();
+    let m = cmd.clone().try_get_matches_from(["hostname"]).unwrap();
     assert_eq!(m.subcommand_name(), Some("hostname"));
 
-    let m = app
-        .clone()
-        .try_get_matches_from(&["dnsdomainname"])
-        .unwrap();
+    let m = cmd.clone().try_get_matches_from(["dnsdomainname"]).unwrap();
     assert_eq!(m.subcommand_name(), Some("dnsdomainname"));
 
-    let m = app.clone().try_get_matches_from(&["a.out"]);
+    let m = cmd.clone().try_get_matches_from(["a.out"]);
     assert!(m.is_err());
-    assert_eq!(m.unwrap_err().kind, ErrorKind::UnknownArgument);
+    assert_eq!(m.unwrap_err().kind(), ErrorKind::InvalidSubcommand);
 
-    let m = app.try_get_matches_from_mut(&["hostname", "hostname"]);
+    let m = cmd.try_get_matches_from_mut(["hostname", "hostname"]);
     assert!(m.is_err());
-    assert_eq!(m.unwrap_err().kind, ErrorKind::UnknownArgument);
+    assert_eq!(m.unwrap_err().kind(), ErrorKind::UnknownArgument);
 
-    let m = app.try_get_matches_from(&["hostname", "dnsdomainname"]);
+    let m = cmd.try_get_matches_from(["hostname", "dnsdomainname"]);
     assert!(m.is_err());
-    assert_eq!(m.unwrap_err().kind, ErrorKind::UnknownArgument);
+    assert_eq!(m.unwrap_err().kind(), ErrorKind::UnknownArgument);
+}
+
+#[test]
+#[cfg(feature = "error-context")]
+fn bad_multicall_command_error() {
+    let cmd = Command::new("repl")
+        .version("1.0.0")
+        .propagate_version(true)
+        .multicall(true)
+        .subcommand(Command::new("foo"))
+        .subcommand(Command::new("bar"));
+
+    let err = cmd.clone().try_get_matches_from(["world"]).unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::InvalidSubcommand);
+    assert_data_eq!(
+        err.to_string(),
+        str![[r#"
+error: unrecognized subcommand 'world'
+
+Usage: <COMMAND>
+
+For more information, try 'help'.
+
+"#]]
+    );
+
+    #[cfg(feature = "suggestions")]
+    {
+        let err = cmd.clone().try_get_matches_from(["baz"]).unwrap_err();
+        utils::assert_error(err, ErrorKind::InvalidSubcommand, str![[r#"
+error: unrecognized subcommand 'baz'
+
+  tip: a similar subcommand exists: 'bar'
+
+Usage: <COMMAND>
+
+For more information, try 'help'.
+
+"#]], true);
+    }
+
+    // Verify whatever we did to get the above to work didn't disable `--help` and `--version`.
+
+    let err = cmd
+        .clone()
+        .try_get_matches_from(["foo", "--help"])
+        .unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::DisplayHelp);
+
+    let err = cmd
+        .clone()
+        .try_get_matches_from(["foo", "--version"])
+        .unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::DisplayVersion);
+}
+
+#[test]
+#[should_panic = "Command repl: Arguments like oh-no cannot be set on a multicall command"]
+fn cant_have_args_with_multicall() {
+    let mut cmd = Command::new("repl")
+        .version("1.0.0")
+        .propagate_version(true)
+        .multicall(true)
+        .subcommand(Command::new("foo"))
+        .subcommand(Command::new("bar"))
+        .arg(Arg::new("oh-no"));
+    cmd.build();
+}
+
+#[test]
+fn multicall_help_flag() {
+    static EXPECTED: &str = "\
+Usage: foo bar [value]
+
+Arguments:
+  [value]  
+
+Options:
+  -h, --help     Print help
+  -V, --version  Print version
+";
+    let cmd = Command::new("repl")
+        .version("1.0.0")
+        .propagate_version(true)
+        .multicall(true)
+        .subcommand(Command::new("foo").defer(|cmd| {
+            cmd.subcommand(Command::new("bar").defer(|cmd| cmd.arg(Arg::new("value"))))
+        }));
+    utils::assert_output(cmd, "foo bar --help", EXPECTED, false);
+}
+
+#[test]
+fn multicall_help_subcommand() {
+    static EXPECTED: &str = "\
+Usage: foo bar [value]
+
+Arguments:
+  [value]  
+
+Options:
+  -h, --help     Print help
+  -V, --version  Print version
+";
+    let cmd = Command::new("repl")
+        .version("1.0.0")
+        .propagate_version(true)
+        .multicall(true)
+        .subcommand(
+            Command::new("foo")
+                .defer(|cmd| cmd.subcommand(Command::new("bar").arg(Arg::new("value")))),
+        );
+    utils::assert_output(cmd, "help foo bar", EXPECTED, false);
+}
+
+#[test]
+fn multicall_render_help() {
+    let mut cmd = Command::new("repl")
+        .version("1.0.0")
+        .propagate_version(true)
+        .multicall(true)
+        .subcommand(
+            Command::new("foo")
+                .defer(|cmd| cmd.subcommand(Command::new("bar").arg(Arg::new("value")))),
+        );
+    cmd.build();
+    let subcmd = cmd.find_subcommand_mut("foo").unwrap();
+    let subcmd = subcmd.find_subcommand_mut("bar").unwrap();
+
+    let help = subcmd.render_help().to_string();
+    assert_data_eq!(
+        help,
+        str![[r#"
+Usage: foo bar [value]
+
+Arguments:
+  [value]  
+
+Options:
+  -h, --help     Print help
+  -V, --version  Print version
+
+"#]]
+    );
+}
+
+#[test]
+#[should_panic = "Command test: command name `repeat` is duplicated"]
+fn duplicate_subcommand() {
+    Command::new("test")
+        .subcommand(Command::new("repeat"))
+        .subcommand(Command::new("repeat"))
+        .build();
+}
+
+#[test]
+#[should_panic = "Command test: command `unique` alias `repeat` is duplicated"]
+fn duplicate_subcommand_alias() {
+    Command::new("test")
+        .subcommand(Command::new("repeat"))
+        .subcommand(Command::new("unique").alias("repeat"))
+        .build();
 }

@@ -1,133 +1,129 @@
-use crate::utils;
+use clap::{error::ErrorKind, Arg, ArgAction, Command};
 
-use clap::{App, Arg, ErrorKind};
+#[cfg(feature = "error-context")]
+use super::utils;
 
 #[test]
 fn empty_values() {
-    let m = App::new("config")
-        .arg(Arg::new("config").long("config").takes_value(true))
-        .try_get_matches_from(&["config", "--config", ""])
+    let m = Command::new("config")
+        .arg(Arg::new("config").long("config").action(ArgAction::Set))
+        .try_get_matches_from(["config", "--config", ""])
         .unwrap();
-    assert_eq!(m.value_of("config"), Some(""));
+    assert_eq!(m.get_one::<String>("config").map(|v| v.as_str()), Some(""));
 }
 
 #[test]
 fn empty_values_with_equals() {
-    let m = App::new("config")
-        .arg(Arg::new("config").long("config").takes_value(true))
-        .try_get_matches_from(&["config", "--config="])
+    let m = Command::new("config")
+        .arg(Arg::new("config").long("config").action(ArgAction::Set))
+        .try_get_matches_from(["config", "--config="])
         .unwrap();
-    assert_eq!(m.value_of("config"), Some(""));
+    assert_eq!(m.get_one::<String>("config").map(|v| v.as_str()), Some(""));
 
-    let m = App::new("config")
-        .arg(Arg::new("config").short('c').takes_value(true))
-        .try_get_matches_from(&["config", "-c="])
+    let m = Command::new("config")
+        .arg(Arg::new("config").short('c').action(ArgAction::Set))
+        .try_get_matches_from(["config", "-c="])
         .unwrap();
-    assert_eq!(m.value_of("config"), Some(""))
+    assert_eq!(m.get_one::<String>("config").map(|v| v.as_str()), Some(""));
 }
 
 #[test]
 fn no_empty_values() {
-    let m = App::new("config")
+    let m = Command::new("config")
         .arg(
             Arg::new("config")
                 .long("config")
-                .takes_value(true)
-                .forbid_empty_values(true),
+                .action(ArgAction::Set)
+                .value_parser(clap::builder::NonEmptyStringValueParser::new()),
         )
-        .try_get_matches_from(&["config", "--config", ""]);
+        .try_get_matches_from(["config", "--config", ""]);
     assert!(m.is_err());
-    assert_eq!(m.unwrap_err().kind, ErrorKind::EmptyValue);
+    assert_eq!(m.unwrap_err().kind(), ErrorKind::InvalidValue);
 
-    let m = App::new("config")
+    let m = Command::new("config")
         .arg(
             Arg::new("config")
                 .short('c')
-                .takes_value(true)
-                .forbid_empty_values(true),
+                .action(ArgAction::Set)
+                .value_parser(clap::builder::NonEmptyStringValueParser::new()),
         )
-        .try_get_matches_from(&["config", "-c", ""]);
+        .try_get_matches_from(["config", "-c", ""]);
     assert!(m.is_err());
-    assert_eq!(m.unwrap_err().kind, ErrorKind::EmptyValue)
+    assert_eq!(m.unwrap_err().kind(), ErrorKind::InvalidValue);
 }
 
 #[test]
 fn no_empty_values_with_equals() {
-    let m = App::new("config")
+    let m = Command::new("config")
         .arg(
             Arg::new("config")
                 .long("config")
-                .takes_value(true)
-                .forbid_empty_values(true),
+                .action(ArgAction::Set)
+                .value_parser(clap::builder::NonEmptyStringValueParser::new()),
         )
-        .try_get_matches_from(&["config", "--config="]);
+        .try_get_matches_from(["config", "--config="]);
     assert!(m.is_err());
-    assert_eq!(m.unwrap_err().kind, ErrorKind::EmptyValue);
+    assert_eq!(m.unwrap_err().kind(), ErrorKind::InvalidValue);
 
-    let m = App::new("config")
+    let m = Command::new("config")
         .arg(
             Arg::new("config")
                 .short('c')
-                .takes_value(true)
-                .forbid_empty_values(true),
+                .action(ArgAction::Set)
+                .value_parser(clap::builder::NonEmptyStringValueParser::new()),
         )
-        .try_get_matches_from(&["config", "-c="]);
+        .try_get_matches_from(["config", "-c="]);
     assert!(m.is_err());
-    assert_eq!(m.unwrap_err().kind, ErrorKind::EmptyValue);
+    assert_eq!(m.unwrap_err().kind(), ErrorKind::InvalidValue);
 }
 
 #[test]
 fn no_empty_values_without_equals() {
-    let m = App::new("config")
+    let m = Command::new("config")
         .arg(
             Arg::new("config")
                 .long("config")
-                .takes_value(true)
-                .forbid_empty_values(true),
+                .action(ArgAction::Set)
+                .value_parser(clap::builder::NonEmptyStringValueParser::new()),
         )
-        .try_get_matches_from(&["config", "--config"]);
+        .try_get_matches_from(["config", "--config"]);
     assert!(m.is_err());
-    assert_eq!(m.unwrap_err().kind, ErrorKind::EmptyValue);
+    assert_eq!(m.unwrap_err().kind(), ErrorKind::InvalidValue);
 
-    let m = App::new("config")
+    let m = Command::new("config")
         .arg(
             Arg::new("config")
                 .short('c')
-                .takes_value(true)
-                .forbid_empty_values(true),
+                .action(ArgAction::Set)
+                .value_parser(clap::builder::NonEmptyStringValueParser::new()),
         )
-        .try_get_matches_from(&["config", "-c"]);
+        .try_get_matches_from(["config", "-c"]);
     assert!(m.is_err());
-    assert_eq!(m.unwrap_err().kind, ErrorKind::EmptyValue)
+    assert_eq!(m.unwrap_err().kind(), ErrorKind::InvalidValue);
 }
 
 #[test]
+#[cfg(feature = "error-context")]
 fn no_empty_values_without_equals_but_requires_equals() {
-    let app = App::new("config").arg(
+    let cmd = Command::new("config").arg(
         Arg::new("config")
             .long("config")
-            .takes_value(true)
-            .forbid_empty_values(true)
+            .action(ArgAction::Set)
+            .value_parser(clap::builder::NonEmptyStringValueParser::new())
             .require_equals(true),
     );
-    let m = app.clone().try_get_matches_from(&["config", "--config"]);
+    let m = cmd.clone().try_get_matches_from(["config", "--config"]);
     // Should error on no equals rather than empty value.
     assert!(m.is_err());
-    assert_eq!(m.unwrap_err().kind, ErrorKind::NoEquals);
+    assert_eq!(m.unwrap_err().kind(), ErrorKind::NoEquals);
 
     static NO_EUQALS_ERROR: &str =
-        "error: Equal sign is needed when assigning values to '--config=<config>'.
+        "error: equal sign is needed when assigning values to '--config=<config>'
 
-USAGE:
-    config [OPTIONS]
+Usage: config [OPTIONS]
 
-For more information try --help
+For more information, try '--help'.
 ";
 
-    assert!(utils::compare_output(
-        app,
-        "config --config",
-        NO_EUQALS_ERROR,
-        true
-    ));
+    utils::assert_output(cmd, "config --config", NO_EUQALS_ERROR, true);
 }

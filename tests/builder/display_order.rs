@@ -1,26 +1,24 @@
-use crate::utils;
+use super::utils;
 
-use clap::App;
+use clap::Command;
 
 #[test]
 fn very_large_display_order() {
-    let app = App::new("test").subcommand(App::new("sub").display_order(usize::MAX));
+    let cmd = Command::new("test").subcommand(Command::new("sub").display_order(usize::MAX));
 
-    assert!(utils::compare_output(
-        app,
+    utils::assert_output(
+        cmd,
         "test --help",
-        "test 
+        "\
+Usage: test [COMMAND]
 
-USAGE:
-    test [SUBCOMMAND]
+Commands:
+  help  Print this message or the help of the given subcommand(s)
+  sub   
 
-OPTIONS:
-    -h, --help    Print help information
-
-SUBCOMMANDS:
-    help    Print this message or the help of the given subcommand(s)
-    sub     
+Options:
+  -h, --help  Print help
 ",
-        false
-    ));
+        false,
+    );
 }

@@ -3,8 +3,13 @@ on:
   push:
     tags:
     - "v*"
+permissions:
+  contents: read
+
 jobs:
   create-release:
+    permissions:
+      contents: write  # for actions/create-release to create a release
     name: create-release
     runs-on: ubuntu-latest
     outputs:
@@ -19,7 +24,7 @@ jobs:
         echo "RELEASE_VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
         echo "version is: ${{ env.RELEASE_VERSION }}"
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
       with:
         fetch-depth: 1
     - name: Generate Release Notes

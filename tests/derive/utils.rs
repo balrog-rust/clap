@@ -5,50 +5,65 @@
 // Accept and endure. Do not touch.
 #![allow(unused)]
 
-use clap::IntoApp;
+use clap::CommandFactory;
+use snapbox::assert_data_eq;
 
-pub fn get_help<T: IntoApp>() -> String {
-    let mut output = Vec::new();
-    <T as IntoApp>::into_app().write_help(&mut output).unwrap();
-    let output = String::from_utf8(output).unwrap();
+pub(crate) const FULL_TEMPLATE: &str = "\
+{before-help}{name} {version}
+{author-with-newline}{about-with-newline}
+{usage-heading} {usage}
 
-    eprintln!("\n%%% HELP %%%:=====\n{}\n=====\n", output);
-    eprintln!("\n%%% HELP (DEBUG) %%%:=====\n{:?}\n=====\n", output);
+{all-args}{after-help}";
 
-    output
-}
+pub(crate) fn get_help<T: CommandFactory>() -> String {
+    let output = <T as CommandFactory>::command().render_help().to_string();
 
-pub fn get_long_help<T: IntoApp>() -> String {
-    let mut output = Vec::new();
-    <T as IntoApp>::into_app()
-        .write_long_help(&mut output)
-        .unwrap();
-    let output = String::from_utf8(output).unwrap();
-
-    eprintln!("\n%%% LONG_HELP %%%:=====\n{}\n=====\n", output);
-    eprintln!("\n%%% LONG_HELP (DEBUG) %%%:=====\n{:?}\n=====\n", output);
+    eprintln!("\n%%% HELP %%%:=====\n{output}\n=====\n");
+    eprintln!("\n%%% HELP (DEBUG) %%%:=====\n{output:?}\n=====\n");
 
     output
 }
 
-pub fn get_subcommand_long_help<T: IntoApp>(subcmd: &str) -> String {
-    let mut output = Vec::new();
-    <T as IntoApp>::into_app()
+pub(crate) fn get_long_help<T: CommandFactory>() -> String {
+    let output = <T as CommandFactory>::command()
+        .render_long_help()
+        .to_string();
+
+    eprintln!("\n%%% LONG_HELP %%%:=====\n{output}\n=====\n");
+    eprintln!("\n%%% LONG_HELP (DEBUG) %%%:=====\n{output:?}\n=====\n");
+
+    output
+}
+
+pub(crate) fn get_subcommand_long_help<T: CommandFactory>(subcmd: &str) -> String {
+    let output = <T as CommandFactory>::command()
         .get_subcommands_mut()
         .find(|s| s.get_name() == subcmd)
         .unwrap()
-        .write_long_help(&mut output)
-        .unwrap();
-    let output = String::from_utf8(output).unwrap();
+        .render_long_help()
+        .to_string();
 
-    eprintln!(
-        "\n%%% SUBCOMMAND `{}` HELP %%%:=====\n{}\n=====\n",
-        subcmd, output
-    );
-    eprintln!(
-        "\n%%% SUBCOMMAND `{}` HELP (DEBUG) %%%:=====\n{:?}\n=====\n",
-        subcmd, output
-    );
+    eprintln!("\n%%% SUBCOMMAND `{subcmd}` HELP %%%:=====\n{output}\n=====\n",);
+    eprintln!("\n%%% SUBCOMMAND `{subcmd}` HELP (DEBUG) %%%:=====\n{output:?}\n=====\n",);
 
     output
+}
+
+#[track_caller]
+pub(crate) fn assert_output<P: clap::Parser + std::fmt::Debug>(
+    args: &str,
+    expected: impl snapbox::IntoData,
+    stderr: bool,
+) {
+    let res = P::try_parse_from(args.split(' ').collect::<Vec<_>>());
+    let err = res.unwrap_err();
+    let actual = err.render().to_string();
+    assert_eq!(
+        stderr,
+        err.use_stderr(),
+        "Should Use STDERR failed. Should be {} but is {}",
+        stderr,
+        err.use_stderr()
+    );
+    assert_data_eq!(actual, expected);
 }

@@ -6,20 +6,20 @@ use clap::Parser;
 fn explicit_short_long_no_rename() {
     #[derive(Parser, PartialEq, Debug)]
     struct Opt {
-        #[clap(short = '.', long = ".foo")]
+        #[arg(short = '.', long = ".foo")]
         foo: String,
     }
 
     assert_eq!(
         Opt { foo: "long".into() },
-        Opt::try_parse_from(&["test", "--.foo", "long"]).unwrap()
+        Opt::try_parse_from(["test", "--.foo", "long"]).unwrap()
     );
 
     assert_eq!(
         Opt {
             foo: "short".into(),
         },
-        Opt::try_parse_from(&["test", "-.", "short"]).unwrap()
+        Opt::try_parse_from(["test", "-.", "short"]).unwrap()
     );
 }
 
@@ -27,10 +27,10 @@ fn explicit_short_long_no_rename() {
 fn explicit_name_no_rename() {
     #[derive(Parser, PartialEq, Debug)]
     struct Opt {
-        #[clap(name = ".options")]
+        #[arg(id = ".options")]
         foo: String,
     }
 
     let help = utils::get_long_help::<Opt>();
-    assert!(help.contains("<.options>"))
+    assert!(help.contains("<.options>"));
 }

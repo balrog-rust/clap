@@ -3,21 +3,31 @@
 use std::env;
 use std::ffi::OsStr;
 
-use clap::{arg, App, Arg};
+use clap::{arg, builder::FalseyValueParser, Arg, ArgAction, Command};
 
 #[test]
 fn env() {
     env::set_var("CLP_TEST_ENV", "env");
 
-    let r = App::new("df")
-        .arg(arg!([arg] "some opt").env("CLP_TEST_ENV").takes_value(true))
+    let r = Command::new("df")
+        .arg(
+            arg!([arg] "some opt")
+                .env("CLP_TEST_ENV")
+                .action(ArgAction::Set),
+        )
         .try_get_matches_from(vec![""]);
 
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.occurrences_of("arg"), 0);
-    assert_eq!(m.value_of("arg").unwrap(), "env");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.value_source("arg").unwrap(),
+        clap::parser::ValueSource::EnvVariable
+    );
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "env"
+    );
 }
 
 #[test]
@@ -25,38 +35,56 @@ fn env_bool_literal() {
     env::set_var("CLP_TEST_FLAG_TRUE", "On");
     env::set_var("CLP_TEST_FLAG_FALSE", "nO");
 
-    let r = App::new("df")
-        .arg(Arg::new("present").short('p').env("CLP_TEST_FLAG_TRUE"))
-        .arg(Arg::new("negated").short('n').env("CLP_TEST_FLAG_FALSE"))
-        .arg(Arg::new("absent").short('a').env("CLP_TEST_FLAG_ABSENT"))
+    let r = Command::new("df")
+        .arg(
+            Arg::new("present")
+                .short('p')
+                .env("CLP_TEST_FLAG_TRUE")
+                .action(ArgAction::SetTrue)
+                .value_parser(FalseyValueParser::new()),
+        )
+        .arg(
+            Arg::new("negated")
+                .short('n')
+                .env("CLP_TEST_FLAG_FALSE")
+                .action(ArgAction::SetTrue)
+                .value_parser(FalseyValueParser::new()),
+        )
+        .arg(
+            Arg::new("absent")
+                .short('a')
+                .env("CLP_TEST_FLAG_ABSENT")
+                .action(ArgAction::SetTrue)
+                .value_parser(FalseyValueParser::new()),
+        )
         .try_get_matches_from(vec![""]);
 
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("present"));
-    assert_eq!(m.occurrences_of("present"), 0);
-    assert_eq!(m.value_of("present"), None);
-    assert!(!m.is_present("negated"));
-    assert!(!m.is_present("absent"));
+    assert!(*m.get_one::<bool>("present").expect("defaulted by clap"));
+    assert!(!*m.get_one::<bool>("negated").expect("defaulted by clap"));
+    assert!(!*m.get_one::<bool>("absent").expect("defaulted by clap"));
 }
 
 #[test]
 fn env_os() {
     env::set_var("CLP_TEST_ENV_OS", "env");
 
-    let r = App::new("df")
+    let r = Command::new("df")
         .arg(
             arg!([arg] "some opt")
-                .env_os(OsStr::new("CLP_TEST_ENV_OS"))
-                .takes_value(true),
+                .env(OsStr::new("CLP_TEST_ENV_OS"))
+                .action(ArgAction::Set),
         )
         .try_get_matches_from(vec![""]);
 
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.occurrences_of("arg"), 0);
-    assert_eq!(m.value_of("arg").unwrap(), "env");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "env"
+    );
 }
 
 #[test]
@@ -65,19 +93,19 @@ fn no_env() {
     // we need another variable just in case one of the others is running at the same time...
     env::remove_var("CLP_TEST_ENV_NONE");
 
-    let r = App::new("df")
+    let r = Command::new("df")
         .arg(
             arg!([arg] "some opt")
                 .env("CLP_TEST_ENV_NONE")
-                .takes_value(true),
+                .action(ArgAction::Set),
         )
         .try_get_matches_from(vec![""]);
 
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(!m.is_present("arg"));
-    assert_eq!(m.occurrences_of("arg"), 0);
-    assert_eq!(m.value_of("arg"), None);
+    assert!(!m.contains_id("arg"));
+    assert_eq!(m.value_source("arg"), None);
+    assert_eq!(m.get_one::<String>("arg").map(|v| v.as_str()), None);
 }
 
 #[test]
@@ -86,57 +114,73 @@ fn no_env_no_takes_value() {
     // we need another variable just in case one of the others is running at the same time...
     env::remove_var("CLP_TEST_ENV_NONE");
 
-    let r = App::new("df")
+    let r = Command::new("df")
         .arg(arg!([arg] "some opt").env("CLP_TEST_ENV_NONE"))
         .try_get_matches_from(vec![""]);
 
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(!m.is_present("arg"));
-    assert_eq!(m.occurrences_of("arg"), 0);
-    assert_eq!(m.value_of("arg"), None);
+    assert!(!m.contains_id("arg"));
+    assert_eq!(m.value_source("arg"), None);
+    assert_eq!(m.get_one::<String>("arg").map(|v| v.as_str()), None);
 }
 
 #[test]
 fn with_default() {
     env::set_var("CLP_TEST_ENV_WD", "env");
 
-    let r = App::new("df")
+    let r = Command::new("df")
         .arg(
             arg!([arg] "some opt")
                 .env("CLP_TEST_ENV_WD")
-                .takes_value(true)
+                .action(ArgAction::Set)
                 .default_value("default"),
         )
         .try_get_matches_from(vec![""]);
 
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.occurrences_of("arg"), 0);
-    assert_eq!(m.value_of("arg").unwrap(), "env");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.value_source("arg").unwrap(),
+        clap::parser::ValueSource::EnvVariable
+    );
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "env"
+    );
 }
 
 #[test]
 fn opt_user_override() {
     env::set_var("CLP_TEST_ENV_OR", "env");
 
-    let r = App::new("df")
+    let r = Command::new("df")
         .arg(
             arg!(--arg [FILE] "some arg")
                 .env("CLP_TEST_ENV_OR")
-                .takes_value(true),
+                .action(ArgAction::Set),
         )
         .try_get_matches_from(vec!["", "--arg", "opt"]);
 
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.occurrences_of("arg"), 1);
-    assert_eq!(m.value_of("arg").unwrap(), "opt");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.value_source("arg").unwrap(),
+        clap::parser::ValueSource::CommandLine
+    );
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "opt"
+    );
 
     // see https://github.com/clap-rs/clap/issues/1835
-    let values: Vec<_> = m.values_of("arg").unwrap().collect();
+    let values: Vec<_> = m
+        .get_many::<String>("arg")
+        .unwrap()
+        .map(|v| v.as_str())
+        .collect();
     assert_eq!(values, vec!["opt"]);
 }
 
@@ -144,41 +188,57 @@ fn opt_user_override() {
 fn positionals() {
     env::set_var("CLP_TEST_ENV_P", "env");
 
-    let r = App::new("df")
+    let r = Command::new("df")
         .arg(
             arg!([arg] "some opt")
                 .env("CLP_TEST_ENV_P")
-                .takes_value(true),
+                .action(ArgAction::Set),
         )
         .try_get_matches_from(vec![""]);
 
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.occurrences_of("arg"), 0);
-    assert_eq!(m.value_of("arg").unwrap(), "env");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.value_source("arg").unwrap(),
+        clap::parser::ValueSource::EnvVariable
+    );
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "env"
+    );
 }
 
 #[test]
 fn positionals_user_override() {
     env::set_var("CLP_TEST_ENV_POR", "env");
 
-    let r = App::new("df")
+    let r = Command::new("df")
         .arg(
             arg!([arg] "some opt")
                 .env("CLP_TEST_ENV_POR")
-                .takes_value(true),
+                .action(ArgAction::Set),
         )
         .try_get_matches_from(vec!["", "opt"]);
 
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.occurrences_of("arg"), 1);
-    assert_eq!(m.value_of("arg").unwrap(), "opt");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.value_source("arg").unwrap(),
+        clap::parser::ValueSource::CommandLine
+    );
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "opt"
+    );
 
     // see https://github.com/clap-rs/clap/issues/1835
-    let values: Vec<_> = m.values_of("arg").unwrap().collect();
+    let values: Vec<_> = m
+        .get_many::<String>("arg")
+        .unwrap()
+        .map(|v| v.as_str())
+        .collect();
     assert_eq!(values, vec!["opt"]);
 }
 
@@ -186,43 +246,50 @@ fn positionals_user_override() {
 fn multiple_one() {
     env::set_var("CLP_TEST_ENV_MO", "env");
 
-    let r = App::new("df")
+    let r = Command::new("df")
         .arg(
             arg!([arg] "some opt")
                 .env("CLP_TEST_ENV_MO")
-                .takes_value(true)
-                .use_delimiter(true)
-                .multiple_values(true),
+                .action(ArgAction::Set)
+                .value_delimiter(',')
+                .num_args(1..),
         )
         .try_get_matches_from(vec![""]);
 
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.occurrences_of("arg"), 0);
-    assert_eq!(m.values_of("arg").unwrap().collect::<Vec<_>>(), vec!["env"]);
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.get_many::<String>("arg")
+            .unwrap()
+            .map(|v| v.as_str())
+            .collect::<Vec<_>>(),
+        vec!["env"]
+    );
 }
 
 #[test]
 fn multiple_three() {
     env::set_var("CLP_TEST_ENV_MULTI1", "env1,env2,env3");
 
-    let r = App::new("df")
+    let r = Command::new("df")
         .arg(
             arg!([arg] "some opt")
                 .env("CLP_TEST_ENV_MULTI1")
-                .takes_value(true)
-                .use_delimiter(true)
-                .multiple_values(true),
+                .action(ArgAction::Set)
+                .value_delimiter(',')
+                .num_args(1..),
         )
         .try_get_matches_from(vec![""]);
 
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.occurrences_of("arg"), 0);
+    assert!(m.contains_id("arg"));
     assert_eq!(
-        m.values_of("arg").unwrap().collect::<Vec<_>>(),
+        m.get_many::<String>("arg")
+            .unwrap()
+            .map(|v| v.as_str())
+            .collect::<Vec<_>>(),
         vec!["env1", "env2", "env3"]
     );
 }
@@ -231,21 +298,23 @@ fn multiple_three() {
 fn multiple_no_delimiter() {
     env::set_var("CLP_TEST_ENV_MULTI2", "env1 env2 env3");
 
-    let r = App::new("df")
+    let r = Command::new("df")
         .arg(
             arg!([arg] "some opt")
                 .env("CLP_TEST_ENV_MULTI2")
-                .takes_value(true)
-                .multiple_values(true),
+                .action(ArgAction::Set)
+                .num_args(1..),
         )
         .try_get_matches_from(vec![""]);
 
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.occurrences_of("arg"), 0);
+    assert!(m.contains_id("arg"));
     assert_eq!(
-        m.values_of("arg").unwrap().collect::<Vec<_>>(),
+        m.get_many::<String>("arg")
+            .unwrap()
+            .map(|v| v.as_str())
+            .collect::<Vec<_>>(),
         vec!["env1 env2 env3"]
     );
 }
@@ -254,32 +323,34 @@ fn multiple_no_delimiter() {
 fn possible_value() {
     env::set_var("CLP_TEST_ENV_PV", "env");
 
-    let r = App::new("df")
+    let r = Command::new("df")
         .arg(
             arg!([arg] "some opt")
                 .env("CLP_TEST_ENV_PV")
-                .takes_value(true)
-                .possible_value("env"),
+                .action(ArgAction::Set)
+                .value_parser(["env"]),
         )
         .try_get_matches_from(vec![""]);
 
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.occurrences_of("arg"), 0);
-    assert_eq!(m.value_of("arg").unwrap(), "env");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "env"
+    );
 }
 
 #[test]
 fn not_possible_value() {
     env::set_var("CLP_TEST_ENV_NPV", "env");
 
-    let r = App::new("df")
+    let r = Command::new("df")
         .arg(
             arg!([arg] "some opt")
                 .env("CLP_TEST_ENV_NPV")
-                .takes_value(true)
-                .possible_value("never"),
+                .action(ArgAction::Set)
+                .value_parser(["never"]),
         )
         .try_get_matches_from(vec![""]);
 
@@ -287,19 +358,19 @@ fn not_possible_value() {
 }
 
 #[test]
-fn validator() {
+fn value_parser() {
     env::set_var("CLP_TEST_ENV_VDOR", "env");
 
-    let r = App::new("df")
+    let r = Command::new("df")
         .arg(
             arg!([arg] "some opt")
                 .env("CLP_TEST_ENV_VDOR")
-                .takes_value(true)
-                .validator(|s| {
+                .action(ArgAction::Set)
+                .value_parser(|s: &str| -> Result<String, String> {
                     if s == "env" {
-                        Ok(())
+                        Ok(s.to_owned())
                     } else {
-                        Err("not equal".to_string())
+                        Err("not equal".to_owned())
                     }
                 }),
         )
@@ -307,40 +378,42 @@ fn validator() {
 
     assert!(r.is_ok(), "{}", r.unwrap_err());
     let m = r.unwrap();
-    assert!(m.is_present("arg"));
-    assert_eq!(m.occurrences_of("arg"), 0);
-    assert_eq!(m.value_of("arg").unwrap(), "env");
+    assert!(m.contains_id("arg"));
+    assert_eq!(
+        m.get_one::<String>("arg").map(|v| v.as_str()).unwrap(),
+        "env"
+    );
 }
 
 #[test]
-fn validator_output() {
+fn value_parser_output() {
     env::set_var("CLP_TEST_ENV_VO", "42");
 
-    let m = App::new("df")
+    let m = Command::new("df")
         .arg(
             arg!([arg] "some opt")
                 .env("CLP_TEST_ENV_VO")
-                .takes_value(true)
-                .validator(|s| s.parse::<i32>()),
+                .action(ArgAction::Set)
+                .value_parser(clap::value_parser!(i32)),
         )
         .try_get_matches_from(vec![""])
         .unwrap();
 
-    assert_eq!(m.value_of("arg").unwrap().parse(), Ok(42));
+    assert_eq!(*m.get_one::<i32>("arg").unwrap(), 42);
 }
 
 #[test]
-fn validator_invalid() {
+fn value_parser_invalid() {
     env::set_var("CLP_TEST_ENV_IV", "env");
 
-    let r = App::new("df")
+    let r = Command::new("df")
         .arg(
             arg!([arg] "some opt")
                 .env("CLP_TEST_ENV_IV")
-                .takes_value(true)
-                .validator(|s| {
+                .action(ArgAction::Set)
+                .value_parser(|s: &str| -> Result<String, String> {
                     if s != "env" {
-                        Ok(())
+                        Ok(s.to_owned())
                     } else {
                         Err("is equal".to_string())
                     }
